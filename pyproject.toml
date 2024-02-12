@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.8,<3.12"
 torchapp = "^0.1.29"
 
 [tool.poetry.dev-dependencies]
