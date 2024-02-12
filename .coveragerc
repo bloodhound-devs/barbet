@@ -1,0 +1,5 @@
+[run]
+source = gambit
+
+[report]
+precision = 2

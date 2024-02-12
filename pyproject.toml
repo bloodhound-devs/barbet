@@ -1,0 +1,50 @@
+[tool.poetry]
+name = "Gambit"
+version = "0.1.0"
+description = "Geometric Analysis of MicroBIal Taxonomies"
+authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
+license = "Apache-2.0"
+readme = "README.rst"
+repository = "https://github.com/GAMBIT-devs/gambit/"
+documentation = "https://GAMBIT-devs.github.io/gambit"
+homepage = "https://github.com/GAMBIT-devs/gambit/"
+keywords = ["fastai", "torchapp", "pytorch", "deep learning", "command-line interface"]
+# For classifiers see https://pypi.org/classifiers/
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Intended Audience :: Science/Research",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+torchapp = "^0.1.29"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"
+ipykernel = "^6.6.1"
+coverage = "^5.5"
+autopep8 = "^1.5.7"
+Sphinx = "^4.2.0"
+nbsphinx = "^0.8.7"
+sphinx-rtd-theme = "^1.0.0"
+sphinx-autobuild = "^2021.3.14"
+myst-parser = "^0.15.2"
+pre-commit = "^2.15.0"
+sphinx-copybutton = "^0.4.0"
+black = "^21.10b0"
+sphinx-click = {git = "https://github.com/rbturnbull/sphinx-click.git"}
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = [
+    "tests",
+]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+gambit = "gambit.apps:Gambit.main"
