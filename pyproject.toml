@@ -20,6 +20,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
 torchapp = "^0.1.29"
+hierarchicalsoftmax = "^1.0.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"

@@ -13,6 +13,7 @@ class Gambit(ta.TorchApp):
         self,
         inputs:Path = ta.Param(help="The input file."), 
         batch_size:int = ta.Param(default=32, help="The batch size."),
+        esm_layers:int = 6,
     ) -> DataLoaders:
         """
         Creates a FastAI DataLoaders object which Gambit uses in training and prediction.
