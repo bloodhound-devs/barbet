@@ -3,6 +3,9 @@ from torch import nn
 from fastai.data.core import DataLoaders
 import torchapp as ta
 from rich.console import Console
+
+from .models import get_esm2_model_alphabet, GambitESMModel
+
 console = Console()
 
 class Gambit(ta.TorchApp):
@@ -25,6 +28,12 @@ class Gambit(ta.TorchApp):
         Returns:
             DataLoaders: The DataLoaders object.
         """
+        self.esm_layers = esm_layers
+        self.esm, self.alphabet = get_esm2_model_alphabet(esm_layers)
+
+        self.classification_tree = None
+        assert self.classification_tree is not None
+
         raise NotImplemented("Dataloaders function not implemented yet.") 
 
     def model(
@@ -36,6 +45,9 @@ class Gambit(ta.TorchApp):
         Returns:
             nn.Module: The created model.
         """
-        raise NotImplemented("Model function not implemented yet.") 
-        return nn.Sequential(
+        return GambitESMModel(
+            esm=self.esm,
+            esm_layers=self.esm_layers,
+            alphabet=self.alphabet,
+            classification_tree=self.classification_tree,
         )

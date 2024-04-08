@@ -25,15 +25,21 @@ class GambitESMModel(nn.Module):
     esm: nn.Module
     esm_layers: int
 
-    def __init__(self, esm:nn.Module, esm_layers:int, classification_tree:SoftmaxNode):
+    def __init__(self, esm:nn.Module, alphabet, esm_layers:int, classification_tree:SoftmaxNode):
         self.esm = esm
         self.esm_layers = esm_layers
+        self.alphabet = alphabet
         self.classification_tree = classification_tree
 
         self.softmax_layer = HierarchicalSoftmaxLazyLinear(root=classification_tree)
 
-    def forward(self, x):
-        esm_results = self.esm(x, repr_layers=[self.esm_layers], return_contacts=False)
-        representations = esm_results['representations'][self.esm_layers]
-        return self.softmax_layer(representations)
+    def forward(self, batch_tokens):
+        batch_lengths = (batch_tokens != self.alphabet.padding_idx).sum(1)
+        esm_results = self.esm(batch_tokens, repr_layers=[self.esm_layers], return_contacts=False)
+        token_representations = esm_results['representations'][self.esm_layers]
+        sample_representations = torch.zeros(batch_tokens.shape[0], token_representations[0].shape[-1])
+        for i, tokens_count in enumerate(batch_lengths):
+            sample_representations[i] = token_representations[i, 1 : tokens_count - 1].mean(0)
+
+        return self.softmax_layer(sample_representations)
         
