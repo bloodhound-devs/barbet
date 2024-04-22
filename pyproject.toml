@@ -18,9 +18,10 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.12"
-torchapp = "^0.1.29"
+python = ">=3.9,<3.12"
+torchapp = ">=0.3.10"
 hierarchicalsoftmax = "^1.0.2"
+bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
@@ -31,7 +32,7 @@ Sphinx = "^4.2.0"
 nbsphinx = "^0.8.7"
 sphinx-rtd-theme = "^1.0.0"
 sphinx-autobuild = "^2021.3.14"
-myst-parser = "^0.15.2"
+myst-parser = ">=0.15.2"
 pre-commit = "^2.15.0"
 sphinx-copybutton = "^0.4.0"
 black = "^21.10b0"
