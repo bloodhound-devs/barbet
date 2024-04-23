@@ -50,3 +50,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 gambit = "gambit.apps:Gambit.main"
+ 

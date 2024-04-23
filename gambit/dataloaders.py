@@ -8,6 +8,7 @@ from fastai.data.core import TfmdDL
 from dataclasses import dataclass
 from rich.progress import track
 
+
 def get_preprocessed_path(base_dir:Path, name:str) -> Path:
     assert len(name) == len("RS_GCF_000006945.2")
     path = base_dir/name[3:6]/name[7:10]/name[10:13]/name[13:16]/f"{name}.pt"    
@@ -32,31 +33,7 @@ class AccessionToInputOutput(Transform):
         assert path.exists()
         data = torch.load(str(path))
 
-        # i = random.randint(0,len(data)-1)
         return data[i], self.seqtree[accession].node_id
-
-
-# def create_dataloader(
-#     seqtree:SeqTree,
-#     base_dir:Path, 
-#     batch_size:int, 
-#     validation_partition:int, 
-#     max_seqs: int = 0,
-# ) -> TfmdDL:
-#     accessions = []
-#     for accession, details in seqtree.items():
-#         if details.partition == validation_partition:
-#             accessions.append(accession)
-
-#     if max_seqs:
-#         accessions = accessions[:max_seqs]
-
-#     return TfmdDL(
-#         dataset=accessions,
-#         batch_size=batch_size, 
-#         shuffle=False,
-#         after_item=AccessionToInputOutput(base_dir=base_dir, seqtree=seqtree),
-#     )   
 
 
 def create_dataloaders(
