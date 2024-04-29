@@ -44,21 +44,29 @@ def create_dataloaders(
     max_items:int=0,
 ) -> CorgiDataloaders:   
     
-    training = []
-    validation = []
-    for accession, details in track(seqtree.items()):
-        dataset = validation if details.partition == validation_partition else training
+    def check_file(accession, details):
         path = get_preprocessed_path(base_dir, accession)
         assert path.exists()
         data = torch.load(str(path))
+        dataset = []
         for i, embedding in enumerate(data):
             if not torch.isnan(embedding).any():
-                item = Item(accession=accession, index=i)
-                dataset.append( item )
+                dataset.append( (accession,i, details.partition))
+
+        return dataset
+
+    from joblib import Parallel, delayed
+    results = Parallel(n_jobs=-1)(delayed(check_file)(accession, details) for accession, details in track(seqtree.items()))
+    training = []
+    validation = []
+    for result in results:
+        for accession,index,partition in result:
+            dataset = validation if partition == validation_partition else training
+            item = Item(accession=accession, index=index)
+            dataset.append( item )
 
         if max_items and len(training) >= max_items and len(validation) > 0:
             break
-
 
     training_dl = TfmdDL(
         dataset=training,

@@ -23,6 +23,7 @@ class Gambit(ta.TorchApp):
         seqtree:Path = None,
         validation_partition:int=0,
         base_dir:Path=None,
+        max_items:int=None,
     ) -> DataLoaders:
         """
         Creates a FastAI DataLoaders object which Gambit uses in training and prediction.
@@ -49,11 +50,13 @@ class Gambit(ta.TorchApp):
             seqtree=seqtree,
             batch_size=batch_size,
             validation_partition=validation_partition,
+            max_items=max_items,
         )
         return dataloaders
 
     def model(
         self,
+        features:int=5120,
     ) -> nn.Module:
         """
         Creates a deep learning model for the Gambit to use.
@@ -63,6 +66,7 @@ class Gambit(ta.TorchApp):
         """
         return GambitModel(
             classification_tree=self.classification_tree,
+            features=features,
         )
 
     def loss_func(self):
