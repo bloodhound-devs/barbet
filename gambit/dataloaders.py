@@ -36,6 +36,29 @@ class AccessionToInputOutput(Transform):
         return data[i], self.seqtree[accession].node_id
 
 
+@dataclass
+class FileToInput(Transform):
+    path:Path
+    cache:bool=False
+    _data=None
+
+    def data(self):
+        self.path = Path(self.path)
+        if self._data is not None:
+            return self._data
+        
+        assert self.path.exists()
+        data = torch.load(str(self.path))
+        
+        if self.cache:
+            self._data = data
+
+        return data
+
+    def encodes(self, i:int):
+        return self.data()[i],
+
+
 def create_dataloaders(
     seqtree:SeqTree, 
     base_dir:Path, 
@@ -84,3 +107,20 @@ def create_dataloaders(
 
     dls = CorgiDataloaders(training_dl, validation_dl, classification_tree=seqtree.classification_tree)
     return dls
+
+
+def species_dataloader(embeddings:Path, batch_size:int, cache:bool=True) -> TfmdDL:
+    getter = FileToInput(path=embeddings, cache=cache)
+    dataset = []
+    data = getter.data()
+    for i, embedding in enumerate(data):
+        if not torch.isnan(embedding).any():
+            dataset.append( i )
+
+    return TfmdDL(
+        dataset=dataset,
+        batch_size=batch_size, 
+        shuffle=False,
+        after_item=getter,
+    )   
+

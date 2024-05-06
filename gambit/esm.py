@@ -107,13 +107,15 @@ def preprocess_esm(
 
     for record in track(SeqIO.parse(msa, "fasta"), total=total):
         name = record.id
+        node = accesssion_to_node[record.id]
+        partition = random.randint(0,partitions-1)
+        seqtree.add(name, node, partition)
+
         path = get_preprocessed_path(output_dir, name)
         if path.exists():
             continue
         path.parent.mkdir(exist_ok=True, parents=True)
         
-        node = accesssion_to_node[record.id]
-        partition = random.randint(0,partitions-1)
         assert len(record.seq) == current_location
         index = 0
         array = None
@@ -121,8 +123,6 @@ def preprocess_esm(
         for marker_id, (start,end) in marker_info_dict.items():
             seq = str(record.seq[start:end]).replace("-","")
             data.append((marker_id, seq))
-
-        seqtree.add(name, node, partition)
 
         index = 0
         batch_size = 1
