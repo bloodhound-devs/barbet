@@ -99,6 +99,7 @@ class Gambit(ta.TorchApp):
         **kwargs,
     ):
         self.dataloader = species_dataloader(embeddings=embeddings, batch_size=batch_size)
+        self.embeddings_path = embeddings
         self.classification_tree = learner.dls.classification_tree
         return self.dataloader
 
@@ -108,10 +109,11 @@ class Gambit(ta.TorchApp):
         output_csv: Path = ta.Param(default=None, help="A path to output the results as a CSV."),
         output_tips_csv: Path = ta.Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
         output_fasta: Path = ta.Param(default=None, help="A path to output the results in FASTA format."),
-        image_dir: Path = ta.Param(default=None, help="A directory to output the results as images."),
-        image_format:str = "svg",
+        image: Path = ta.Param(default=None, help="A path to output the result as an image."),
         image_threshold:float = 0.005,
         prediction_threshold:float = ta.Param(default=0.5, help="The threshold value for making hierarchical predictions."),
+        seqtree:Path = None,
+        output_correct:Path=None,
         **kwargs,
     ):
         
@@ -150,14 +152,10 @@ class Gambit(ta.TorchApp):
         results_df = results_df[["greedy_prediction", "probability" ] + category_names]
 
         # Output images
-        if image_dir:
-            console.print(f"Writing inference probability renders to: {image_dir}")
-            image_dir = Path(image_dir)
-            image_paths = []
-            for _, row in results_df.iterrows():
-                image_path = image_dir / "predictions.png"
-                image_paths.append(image_path)
-
+        if image:
+            console.print(f"Writing inference probability renders to: {image}")
+            image = Path(image)
+            image_paths = [image]
             render_probabilities(
                 root=self.classification_tree, 
                 filepaths=image_paths,
@@ -166,7 +164,18 @@ class Gambit(ta.TorchApp):
                 threshold=image_threshold,
             )
 
-        if not (image_dir or output_fasta or output_csv or output_tips_csv):
+        if output_correct:
+            assert seqtree is not None
+
+            seqtree = SeqTree.load(seqtree)
+            accession = Path(self.embeddings_path).suffix("").name
+            details = seqtree[accession]
+            breakpoint()
+
+
+
+
+        if not (image or output_fasta or output_csv or output_tips_csv):
             print("No output files requested.")
 
         if output_tips_csv:
@@ -188,4 +197,4 @@ class Gambit(ta.TorchApp):
         """ 
         Converts the node to a string
         """
-        return str(node)
+        return str(node).split(",")[-1].strip()
