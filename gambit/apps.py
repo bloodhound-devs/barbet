@@ -13,7 +13,7 @@ from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions
 import pandas as pd
 
 
-from .models import GambitModel, GambitModel2
+from .models import GambitModel
 from .dataloaders import create_dataloaders, species_dataloader
 
 console = Console()
@@ -72,7 +72,7 @@ class Gambit(ta.TorchApp):
         Returns:
             nn.Module: The created model.
         """
-        return GambitModel2(
+        return GambitModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
