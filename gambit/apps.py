@@ -5,6 +5,7 @@ from fastai.data.core import DataLoaders
 import torchapp as ta
 from corgi.seqtree import SeqTree, node_to_str
 from rich.console import Console
+from seqbank import SeqBank
 
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from hierarchicalsoftmax.metrics import GreedyAccuracy
@@ -24,6 +25,7 @@ class Gambit(ta.TorchApp):
     def dataloaders(
         self,
         batch_size:int = ta.Param(default=32, help="The batch size."),
+        seqbank:Path = None,
         seqtree:Path = None,
         validation_partition:int=0,
         base_dir:Path=None,
@@ -39,9 +41,9 @@ class Gambit(ta.TorchApp):
         Returns:
             DataLoaders: The DataLoaders object.
         """
-        assert base_dir is not None
-        base_dir = Path(base_dir)
-        assert seqtree is not None
+        assert seqbank is not None
+        print(f"Loading seqbank {seqbank}")
+        seqbank = SeqBank(seqbank)
 
         print(f"Loading seqtree {seqtree}")
         seqtree = SeqTree.load(seqtree)
@@ -50,7 +52,7 @@ class Gambit(ta.TorchApp):
         assert self.classification_tree is not None
 
         dataloaders = create_dataloaders(
-            base_dir=base_dir,
+            seqbank=seqbank,
             seqtree=seqtree,
             batch_size=batch_size,
             validation_partition=validation_partition,

@@ -1,6 +1,7 @@
 import torch
 from pathlib import Path
 import random
+from seqbank import SeqBank
 from corgi.seqtree import SeqTree
 from corgi.dataloaders import CorgiDataloaders
 from fastcore.transform import Transform
@@ -24,16 +25,12 @@ class Item():
 @dataclass
 class AccessionToInputOutput(Transform):
     seqtree:SeqTree
-    base_dir:Path
+    seqbank:SeqBank
 
-    def encodes(self, item:Item):
-        accession = item.accession
-        i = item.index
-        path = get_preprocessed_path(self.base_dir, accession)
-        assert path.exists()
-        data = torch.load(str(path))
-
-        return data[i], self.seqtree[accession].node_id
+    def encodes(self, accession:str):
+        data = self.seqbank[accession]
+        array = torch.frombuffer(data, dtype=torch.float32)
+        return array, self.seqtree[accession].node_id
 
 
 @dataclass
@@ -61,32 +58,17 @@ class FileToInput(Transform):
 
 def create_dataloaders(
     seqtree:SeqTree, 
-    base_dir:Path, 
+    seqbank:SeqBank, 
     batch_size:int, 
     validation_partition:int,
     max_items:int=0,
 ) -> CorgiDataloaders:   
-    
-    def check_file(accession, details):
-        path = get_preprocessed_path(base_dir, accession)
-        assert path.exists()
-        data = torch.load(str(path))
-        dataset = []
-        for i, embedding in enumerate(data):
-            if not torch.isnan(embedding).any():
-                dataset.append( (accession,i, details.partition))
-
-        return dataset
-
-    from joblib import Parallel, delayed
-    results = Parallel(n_jobs=-1)(delayed(check_file)(accession, details) for accession, details in track(seqtree.items()))
     training = []
     validation = []
-    for result in results:
-        for accession,index,partition in result:
-            dataset = validation if partition == validation_partition else training
-            item = Item(accession=accession, index=index)
-            dataset.append( item )
+    for accession, details in seqtree.items():
+        partition = details.partition
+        dataset = validation if partition == validation_partition else training
+        dataset.append( accession )
 
         if max_items and len(training) >= max_items and len(validation) > 0:
             break
@@ -95,14 +77,14 @@ def create_dataloaders(
         dataset=training,
         batch_size=batch_size, 
         shuffle=True,
-        after_item=AccessionToInputOutput(base_dir=base_dir, seqtree=seqtree),
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree),
     )   
 
     validation_dl = TfmdDL(
         dataset=validation,
         batch_size=batch_size, 
         shuffle=False,
-        after_item=AccessionToInputOutput(base_dir=base_dir, seqtree=seqtree),
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree),
     )   
 
     dls = CorgiDataloaders(training_dl, validation_dl, classification_tree=seqtree.classification_tree)
