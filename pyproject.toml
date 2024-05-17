@@ -21,8 +21,11 @@ classifiers = [
 python = ">=3.9,<3.12"
 torchapp = ">=0.3.10"
 hierarchicalsoftmax = "^1.0.2"
+# hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "tensor"}
 bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}
 
+transformers = "^4.40.2"
+sentencepiece = "^0.2.0"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"
@@ -50,4 +53,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 gambit = "gambit.apps:Gambit.main"
- 
+gambit-preprocess-esm = "gambit.embeddings.esm:app"
+gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
