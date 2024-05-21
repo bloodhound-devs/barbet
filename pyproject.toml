@@ -20,7 +20,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 torchapp = ">=0.3.10"
-hierarchicalsoftmax = "^1.0.2"
+hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "main"}
 bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}
 
 [tool.poetry.dev-dependencies]
