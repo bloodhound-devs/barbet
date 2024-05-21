@@ -26,6 +26,10 @@ bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchica
 
 transformers = "^4.40.2"
 sentencepiece = "^0.2.0"
+alphafold = "^2.0.0"
+dm-haiku = "^0.0.12"
+jax = "^0.4.28"
+tqdm = "^4.66.4"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"
@@ -55,3 +59,4 @@ build-backend = "poetry.core.masonry.api"
 gambit = "gambit.apps:Gambit.main"
 gambit-preprocess-esm = "gambit.embeddings.esm:app"
 gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
+gambit-preprocess-alphafold2 = "gambit.embeddings.alphafold2.a2_runner:run_af2"
