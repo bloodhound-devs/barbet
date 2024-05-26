@@ -14,7 +14,10 @@ import pandas as pd
 
 
 from .models import GambitModel
-from .dataloaders import create_dataloaders, species_dataloader
+from .dataloaders import create_dataloaders, species_test_dataloader
+from .embedding import get_key
+
+RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
 console = Console()
 
@@ -28,7 +31,6 @@ class Gambit(ta.TorchApp):
         seqbank:Path = None,
         seqtree:Path = None,
         validation_partition:int=0,
-        base_dir:Path=None,
         max_items:int=None,
     ) -> DataLoaders:
         """
@@ -85,23 +87,26 @@ class Gambit(ta.TorchApp):
     
     def metrics(self):
         return [
-            GreedyAccuracy(root=self.classification_tree, max_depth=1, name="phylum"),
-            GreedyAccuracy(root=self.classification_tree, max_depth=2, name="class"),
-            GreedyAccuracy(root=self.classification_tree, max_depth=3, name="order"),
-            GreedyAccuracy(root=self.classification_tree, max_depth=4, name="family"),
-            GreedyAccuracy(root=self.classification_tree, max_depth=5, name="genus"),
-            GreedyAccuracy(root=self.classification_tree, max_depth=6, name="species"),
+            GreedyAccuracy(root=self.classification_tree, max_depth=i+1, name=rank)
+            for i, rank in enumerate(RANKS)
         ]
 
     def inference_dataloader(
         self,
         learner,
-        embeddings:Path = ta.Param(None, help="A embeddings for a species saved in PyTorch format."),
+        accession:str="",
+        seqbank:Path=None,
         batch_size:int = 64,
         **kwargs,
     ):
-        self.dataloader = species_dataloader(embeddings=embeddings, batch_size=batch_size)
-        self.embeddings_path = embeddings
+        assert seqbank is not None
+        print(f"Loading seqbank {seqbank}")
+        seqbank = SeqBank(seqbank)
+
+        assert accession != ""
+
+        self.accession = accession
+        self.dataloader = species_test_dataloader(accession=accession, seqbank=seqbank, batch_size=batch_size)
         self.classification_tree = learner.dls.classification_tree
         return self.dataloader
 
@@ -113,21 +118,22 @@ class Gambit(ta.TorchApp):
         output_fasta: Path = ta.Param(default=None, help="A path to output the results in FASTA format."),
         image: Path = ta.Param(default=None, help="A path to output the result as an image."),
         image_threshold:float = 0.005,
-        prediction_threshold:float = ta.Param(default=0.5, help="The threshold value for making hierarchical predictions."),
+        prediction_threshold:float = ta.Param(default=0.0, help="The threshold value for making hierarchical predictions."),
         seqtree:Path = None,
         output_correct:Path=None,
         **kwargs,
     ):
         
         assert self.classification_tree # This should be saved from the learner
-        
-        classification_probabilities = node_probabilities(results[0], root=self.classification_tree)
+
+        # Sum the scores which is equivalent of multiplying the probabilities assuming that they are independent
+        results = results[0].sum(axis=0, keepdims=True)
+
+        classification_probabilities = node_probabilities(results, root=self.classification_tree)
         category_names = [self.node_to_str(node) for node in self.classification_tree.node_list if not node.is_root]
 
-        # Average over genes
-        results_df = pd.DataFrame(classification_probabilities.mean(axis=0, keepdims=True).numpy(), columns=category_names)
+        results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
         
-        # Get new tensors now that we've averaged over chunks
         classification_probabilities = torch.as_tensor(results_df[category_names].to_numpy()) 
 
         # get greedy predictions which can use the raw activation or the softmax probabilities
@@ -166,16 +172,25 @@ class Gambit(ta.TorchApp):
                 threshold=image_threshold,
             )
 
-        if output_correct:
-            assert seqtree is not None
-
+        if seqtree is not None:
             seqtree = SeqTree.load(seqtree)
-            accession = Path(self.embeddings_path).suffix("").name
-            details = seqtree[accession]
-            breakpoint()
-
-
-
+            prefix = get_key(self.accession, gene="")
+            for key in seqtree.keys():
+                if key.startswith(prefix):
+                    break
+            correct_node = seqtree.node(key)
+            correct_ancestors = correct_node.ancestors + (correct_node,)
+            prediction_node = predictions[0]
+            prediction_ancestors = prediction_node.ancestors + (prediction_node,)
+            for i, rank in enumerate(RANKS):
+                prediction_rank = str(prediction_ancestors[i+1]).strip()
+                correct_rank = str(correct_ancestors[i+1]).strip()
+                rank_is_correct = (prediction_rank == correct_rank)
+                if rank_is_correct:
+                    console.print(f"[green]{rank} correctly predicted as {prediction_rank}")
+                else:
+                    console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
+                results_df[f"correct_{rank}"] = rank_is_correct
 
         if not (image or output_fasta or output_csv or output_tips_csv):
             print("No output files requested.")

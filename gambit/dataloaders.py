@@ -9,6 +9,8 @@ from fastai.data.core import TfmdDL
 from dataclasses import dataclass
 from rich.progress import track
 
+from .embedding import get_key
+
 
 def get_preprocessed_path(base_dir:Path, name:str) -> Path:
     assert len(name) == len("RS_GCF_000006945.2")
@@ -23,11 +25,22 @@ class Item():
 
 
 @dataclass
+class AccessionToInput(Transform):
+    seqbank:SeqBank
+
+    def encodes(self, accession:str):
+        data = self.seqbank[accession]
+        array = torch.frombuffer(data, dtype=torch.float32)
+        return array,
+
+
+@dataclass
 class AccessionToInputOutput(Transform):
     seqtree:SeqTree
     seqbank:SeqBank
 
     def encodes(self, accession:str):
+        # TODO Refactor to use AccessionToInput
         data = self.seqbank[accession]
         array = torch.frombuffer(data, dtype=torch.float32)
         return array, self.seqtree[accession].node_id
@@ -85,10 +98,22 @@ def create_dataloaders(
         batch_size=batch_size, 
         shuffle=False,
         after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree),
-    )   
+    )
 
     dls = CorgiDataloaders(training_dl, validation_dl, classification_tree=seqtree.classification_tree)
     return dls
+
+
+def species_test_dataloader(accession:str, seqbank:SeqBank, batch_size:int) -> TfmdDL:
+    prefix = get_key(accession=accession, gene="")
+    items = [key for key in seqbank.get_accessions() if key.startswith(prefix)]
+
+    return TfmdDL(
+        dataset=items,
+        batch_size=batch_size, 
+        shuffle=False,
+        after_item=AccessionToInput(seqbank=seqbank),
+    )
 
 
 def species_dataloader(embeddings:Path, batch_size:int, cache:bool=True) -> TfmdDL:
