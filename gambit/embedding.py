@@ -72,6 +72,9 @@ class Embedding(ABC):
         output_seqbank:Path,
         partitions:int=5,
         seed:int=42,
+        file_stride:int=0,
+        file_offset:int=0,
+        filter:list[str]|None=None,
     ):
         seqtree, accession_to_node = self.build_seqtree(taxonomy)
 
@@ -81,13 +84,23 @@ class Embedding(ABC):
         partitions_dict = {}
 
         with tarfile.open(marker_genes, "r:gz") as tar:
-            for member in tar.getmembers():
-                if not member.isfile() or not member.name.endswith(".faa"):
-                    continue
+            members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
+            
+            # Check if we should subset the member files with a stride and offset
+            # This is useful for processing 
+            if file_stride > 0:
+                assert file_offset < file_stride
+                members = members[file_offset::file_stride]
 
+            print(f"Processing {len(members)} files in {marker_genes}")
+
+            for member in members:
                 f = tar.extractfile(member)
                 marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
                 print(marker_id)
+
+                if filter and marker_id not in filter:
+                    continue
 
                 fasta_io = StringIO(f.read().decode('ascii'))
 
@@ -120,4 +133,7 @@ class Embedding(ABC):
                     except Exception as err:
                         print(f"ERROR for {key} ({len(seq)}): {err}")
         
-        seqtree.save(output_seqtree)        
+        if file_stride == 0:
+            seqtree.save(output_seqtree)        
+        else:
+            print("Not outputting seqtree because it would be incomplete because of the file stride. Run again without a file stride.")
