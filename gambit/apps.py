@@ -1,5 +1,6 @@
 from pathlib import Path
 import torch
+from Bio import SeqIO
 from torch import nn
 from fastai.data.core import DataLoaders
 import torchapp as ta
@@ -14,8 +15,10 @@ import pandas as pd
 
 
 from .models import GambitModel
-from .dataloaders import create_dataloaders, species_test_dataloader
+from .dataloaders import create_dataloaders, seqbank_dataloader
 from .embedding import get_key
+from .gtdbtk import read_tophits, read_tigrfam, read_pfam
+from .embeddings.esm import ESMEmbedding
 
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
@@ -32,6 +35,7 @@ class Gambit(ta.TorchApp):
         seqtree:Path = None,
         validation_partition:int=0,
         max_items:int=None,
+        esm_layers:int=6,
     ) -> DataLoaders:
         """
         Creates a FastAI DataLoaders object which Gambit uses in training and prediction.
@@ -53,12 +57,16 @@ class Gambit(ta.TorchApp):
         self.classification_tree = seqtree.classification_tree
         assert self.classification_tree is not None
 
+        # HACK This should be general
+        embedding = ESMEmbedding(layers=esm_layers)
+
         dataloaders = create_dataloaders(
             seqbank=seqbank,
             seqtree=seqtree,
             batch_size=batch_size,
             validation_partition=validation_partition,
             max_items=max_items,
+            embedding=embedding,
         )
         return dataloaders
 
@@ -94,8 +102,12 @@ class Gambit(ta.TorchApp):
     def inference_dataloader(
         self,
         learner,
-        accession:str="",
+        gtdbtk_output:Path=None,
         seqbank:Path=None,
+        fasta:Path=None,
+        tophits:Path=None,
+        tigrfam:Path=None,
+        pfam:Path=None,
         batch_size:int = 64,
         **kwargs,
     ):
@@ -103,10 +115,57 @@ class Gambit(ta.TorchApp):
         print(f"Loading seqbank {seqbank}")
         seqbank = SeqBank(seqbank)
 
-        assert accession != ""
+        # Get Embedding model from dataloaders
+        embedding = learner.dls.embedding
+        assert embedding is not None
 
-        self.accession = accession
-        self.dataloader = species_test_dataloader(accession=accession, seqbank=seqbank, batch_size=batch_size)
+        # If gtdbtk output directory is given, then fetch the top hits from tigrfam
+        def get_subfile(directory:Path, pattern:str) -> Path|None:
+            return next(iter(directory.glob(pattern)), None)
+
+        if gtdbtk_output is not None and gtdbtk_output.exists() and gtdbtk_output.is_dir():
+            if not tophits:
+                tophits = get_subfile(gtdbtk_output, '*_tigrfam_tophit.tsv')
+            if not tigrfam:
+                tophits = get_subfile(gtdbtk_output, '*_tigrfam.tsv')
+            if not pfam:
+                pfam = get_subfile(gtdbtk_output, '*_pfam.tsv')
+            if not fasta:
+                fasta = get_subfile(gtdbtk_output, '*_protein.faa')
+
+        # Create dictionary from gene id to family id from the tophits or tigrfam or pfam
+        if tigrfam and tigrfam.exists():
+            gene_family_dict = read_tigrfam(tigrfam)
+        elif tophits:
+            gene_family_dict = read_tophits(tophits)
+        elif pfam:
+            gene_family_dict = read_pfam(pfam)
+
+        # Find genes where we need to create the embeddings
+        accessions = {f"{gene_id}/{family_id}" for gene_id, family_id in gene_family_dict.items()}
+        accessions_to_do = accessions - set(seqbank.get_accessions())
+        genes_to_do = {accession.split("/")[0] for accession in accessions_to_do}
+
+        # Generate embeddings if necessary
+        print(f"Generating embeddings for {len(genes_to_do)} protein sequences")
+        if genes_to_do:
+            assert fasta is not None
+            fasta = Path(fasta)
+            assert fasta.exists()
+            for record in SeqIO.parse(fasta, "fasta"):
+                if record.id in genes_to_do:
+                    family_id = gene_family_dict[record.id]
+                    print(record.id, family_id)
+                    vector = embedding(record.seq)
+                    if vector is not None and not torch.isnan(vector).any():
+                        accession = f"{record.id}/{family_id}"
+                        seqbank.add(
+                            seq=vector.cpu().detach().clone().numpy().tobytes(),
+                            accession=accession,
+                        )
+
+        self.items = list(accessions - set(seqbank.get_accessions()))
+        self.dataloader = seqbank_dataloader(seqbank=seqbank, items=self.items, batch_size=batch_size)
         self.classification_tree = learner.dls.classification_tree
         return self.dataloader
 

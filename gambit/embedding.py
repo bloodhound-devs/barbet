@@ -1,6 +1,5 @@
 from pathlib import Path
 from abc import ABC, abstractmethod
-import typer
 from Bio import SeqIO
 import random
 from rich.progress import track
