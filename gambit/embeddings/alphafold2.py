@@ -41,10 +41,12 @@ protein_test_1 = 'MLILISPAKTLDYQSPLTTTRYTLPELLDNSQQLIHEARKLTPPQISTLMRISDKLAGINAA
 
 protein_test_2 = 'MTVKTEAAKGTLTYSRMRGMVAILIAFMKQRRMGLNDFIQKIANNSYACKHPEVQSILKISQPQEPELMNANPSPPPSPSQQINLGPSSNPHAKPSDFHFLKVIGKGSFGKVLLARHKAEEVFYAVKVLQKKAILKKKEEKHIMSERNVLLKNVKHPFLVGLHFSFQTADKLYFVLDYINGGELFYHLQRERCFLEPRARFYAAEIASALGYLHSLNIVYRDLKPENILLDSQGHIVLTDFGLCKENIEHNSTTSTFCGTPEYLAPEVLHKQPYDRTVDWWCLGAVLYEMLYGLPPFYSRNTAEMYDNILNKPLQLKPNITNSARHLLEGLLQKDRTKRLGAKDDFMEIKSHVFFSLINWDDLINKKITPPFNPNVSGPNDLRHFDPEFTEEPVPNSIGKSPDSVLVTASVKEAAEAFLGFSYAPPTDSFL'
 
+TAG = "AlphaFold2Emb"
 
 
 def add_hash(x,y):
   return x+"_"+hashlib.sha1(y.encode()).hexdigest()[:5]
+
 
 @enum.unique
 class ModelType(enum.Enum):
@@ -56,8 +58,11 @@ class RunRepresentationsModel(a2model.RunModel):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
     self.multimer_mode = False # Default to Monomer mode
+    print(f"[{TAG}] Multimer Mode: {self.multimer_mode}", flush=True)
+
     if self.multimer_mode:
       def _forward_fn(batch):
+        print(f"[{TAG}] Running multimer forward_fn", flush=True)
         model = a2modules_multimer.AlphaFold(self.config.model)
         return model(
             batch,
@@ -65,14 +70,18 @@ class RunRepresentationsModel(a2model.RunModel):
             return_representations=True)
     else:
       def _forward_fn(batch):
+        print(f"[{TAG}] Running NON MULTIMER forward_fn", flush=True)
         model = a2modules.AlphaFold(self.config.model)
         # Here we call the AlphaFold model with the extra `return_representations` param set to True
-        return model(
+        model_result = model(
             batch,
             is_training=False,
             compute_loss=False,
             ensemble_representations=True,
             return_representations=True)
+        print(f"[{TAG}] model call completed!", flush=True)
+        
+        return model_result
 
     self.apply = jax.jit(hk.transform(_forward_fn).apply)
     self.init = jax.jit(hk.transform(_forward_fn).init)
@@ -104,7 +113,14 @@ class AlphaFold2Embedding(Embedding):
                 if model_name == "model_3":
                     model_config = a2.model.config.model_config(model_name+"_ptm") # is '_ptm' even needed?
                     model_config.data.eval.num_ensemble = 1
+                print(f"[{TAG}] Model '{model_name}' config:", flush=True)
+                print(model_config, flush=True)
                 self.model_runners[model_name] = RunRepresentationsModel(model_config, self.model_params[model_name])
+        
+        print(f"[{TAG}] Model runners:", flush=True)
+        print(self.model_runners, flush=True)
+        print(f"[{TAG}] Model params:", flush=True)
+        print(self.model_params, flush=True)
         self.query_sequence = None
         self.jobname = "NONE_JOB"
         self.a3m_file = ""
@@ -163,7 +179,7 @@ class AlphaFold2Embedding(Embedding):
                         self.query_sequence = line.rstrip() 
                     print(line, end='')
                 os.rename(custom_msa, self.a3m_file)
-                print(f"moving {custom_msa} to {self.a3m_file}")
+                print(f"moving {custom_msa} to {self.a3m_file}", flush=True)
         else:
             self.a3m_file = f"{self.jobname}.single_sequence.a3m"
             with open(f"{out_dir}/{self.a3m_file}", "w") as text_file:
@@ -187,8 +203,11 @@ class AlphaFold2Embedding(Embedding):
         # This is from ColabFold
         # Turn the raw data into model features.
         feature_dict = {}    
+        print(f"[{TAG}] Running make_sequence_features", flush=True)
         feature_dict.update(a2pipeline.make_sequence_features(sequence=sequence, description='query', num_res=len(sequence)))
+        print(f"[{TAG}] Running make_msa_features", flush=True)
         feature_dict.update(a2pipeline.make_msa_features(msas=single_chain_msas))
+        print(f"[{TAG}] Running empty_placeholder_template_features", flush=True)
         # We don't use templates in AlphaFold Colab notebook, add only empty placeholder features.
         feature_dict.update(notebook_utils.empty_placeholder_template_features(num_templates=0, num_res=len(sequence)))
 
@@ -199,8 +218,9 @@ class AlphaFold2Embedding(Embedding):
         #     **a2pipeline.make_msa_features(msas=[parsed_msa]),
         #     **mk_mock_template(msa)
         # }
-
+        print(f"[{TAG}] Running predict_structure", flush=True)
         plddts, embeddings = self.predict_structure(self.jobname, feature_dict, self.model_runners, random_seed=random.randrange(sys.maxsize))
+        print(f"[{TAG}] Dumping embeddings", flush=True)
         with open(f"{self.jobname}_embeddings.pkl", 'wb') as f:
             pickle.dump(embeddings, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(f"{self.jobname}_plddts.pkl", 'wb') as f:
@@ -220,7 +240,7 @@ class AlphaFold2Embedding(Embedding):
         # return vector      
     
 
-    def predict_structure(self, prefix, feature_dict, model_runners, random_seed=0, do_relax=True):  
+    def predict_structure(self, prefix, feature_dict, model_runners, random_seed=0, do_relax=False):  
         """ This is the core function to run the model and get the predictions  """
         """ Predicts structure using AlphaFold for the given sequence. """
 
@@ -228,17 +248,25 @@ class AlphaFold2Embedding(Embedding):
         embeddings = {} # Predicted embeddings, returned thanks to return_embeddings=True
         
         for model_name, model_runner in model_runners.items():
+            print(f"[{TAG}] Predicting structure for {model_name}", flush=True)
+            print(f"[{TAG}-{model_name}] Processing features: ", flush=True)
+            print(feature_dict, flush=True)
             processed_feature_dict = model_runner.process_features(feature_dict, random_seed=0)
+            print(f"[{TAG}-{model_name}] Predicting...")
             prediction_result = model_runner.predict(processed_feature_dict, random_seed=random_seed)
+            print(f"[{TAG}-{model_name}] RELAXATION: {do_relax}", flush=True)
             if do_relax:
+                print(f"[{TAG}-{model_name}] Relaxing prediction... ", flush=True)
                 unrelaxed_protein = a2protein.from_prediction(processed_feature_dict,prediction_result)
                 unrelaxed_pdb_path = f'{prefix}_unrelaxed_{model_name}.pdb'
                 with open(f"{out_dir}/{unrelaxed_pdb_path}", 'w') as f:
                   f.write(a2.common.protein.to_pdb(unrelaxed_protein))
+            else:
+                print(f"[{TAG}-{model_name}] Skipping relaxation step...", flush=True)
             plddts[model_name] = prediction_result['plddt']
             embeddings[model_name] = prediction_result['representations']
 
-            print(f"{model_name} {plddts[model_name].mean()}")
+            print(f"{model_name} {plddts[model_name].mean()}", flush=True)
 
             if do_relax:
               # Relax the prediction.
@@ -290,10 +318,16 @@ def main(
         partitions=partitions,
         seed=seed,
     )
+    print(f"ALL DONE!!", flush=True)
 
 def test():
-   a2_embed_model = AlphaFold2Embedding()
-   a2_embed_model.embed(protein_test_2)
+    st = time.time()
+
+    a2_embed_model = AlphaFold2Embedding()
+    a2_embed_model.embed(protein_test_2)
+    et = time.time()
+    elapsed_time = et - st
+    print(f"TEST COMPLETED DONE!! Execution time: {elapsed_time}s", flush=True)
 
 if __name__ == "__main__":
     app()
