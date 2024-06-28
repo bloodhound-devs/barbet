@@ -34,6 +34,7 @@ class AccessionToInput(Transform):
     def encodes(self, accession:str):
         data = self.seqbank[accession]
         array = torch.frombuffer(data, dtype=torch.float32)
+        del data
         gene_id = gene_id_from_accession(accession)
         return array, self.gene_id_dict[gene_id]
 
@@ -78,16 +79,16 @@ class GambitDataloaders(DataLoaders):
         device=None, # Device to put `DataLoaders`
         classification_tree:SoftmaxNode=None,
         embedding:Embedding=None,
-        family_dict:dict[str:int]=None
+        gene_id_dict:dict[str:int]=None
     ):
         super().__init__(*loaders, path=path, device=device)
         self.classification_tree = classification_tree
         self.embedding = embedding
-        self.family_dict = family_dict
+        self.gene_id_dict = gene_id_dict
 
     def new_empty(self):
         loaders = [dl.new([]) for dl in self.loaders]
-        return type(self)(*loaders, path=self.path, device=self.device, classification_tree=self.classification_tree, embedding=self.embedding, family_dict=self.family_dict)
+        return type(self)(*loaders, path=self.path, device=self.device, classification_tree=self.classification_tree, embedding=self.embedding, gene_id_dict=self.gene_id_dict)
 
 
 def create_dataloaders(
@@ -113,13 +114,13 @@ def create_dataloaders(
         if max_items and len(training) >= max_items and len(validation) > 0:
             break
 
-    family_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
+    gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
 
     training_dl = TfmdDL(
         dataset=training,
         batch_size=batch_size, 
         shuffle=True,
-        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, family_dict=family_dict),
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, gene_id_dict=gene_id_dict),
         n_imp=2,
     )   
 
@@ -127,7 +128,7 @@ def create_dataloaders(
         dataset=validation,
         batch_size=batch_size, 
         shuffle=False,
-        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, family_dict=family_dict),
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, gene_id_dict=gene_id_dict),
         n_imp=2,
     )
 
@@ -135,7 +136,7 @@ def create_dataloaders(
         training_dl, 
         validation_dl, 
         classification_tree=seqtree.classification_tree, 
-        family_dict=family_dict, 
+        gene_id_dict=gene_id_dict, 
         embedding=embedding,
     )
     return dls

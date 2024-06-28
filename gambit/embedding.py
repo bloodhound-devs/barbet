@@ -73,15 +73,18 @@ class Embedding(ABC):
         seed:int=42,
         file_stride:int=0,
         file_offset:int=0,
+        generate:bool=True,
         filter:list[str]|None=None,
     ):
         seqtree, accession_to_node = self.build_seqtree(taxonomy)
 
-        seqbank = SeqBank(output_seqbank, write=True)        
+        seqbank = SeqBank(output_seqbank, write=True) 
+        starting_accessions = set(seqbank.get_accessions())
         random.seed(seed)
 
         partitions_dict = {}
 
+        print(f"Loading {marker_genes} file.")
         with tarfile.open(marker_genes, "r:gz") as tar:
             members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
             
@@ -96,7 +99,6 @@ class Embedding(ABC):
             for member in members:
                 f = tar.extractfile(member)
                 marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
-                print(marker_id)
 
                 if filter and marker_id not in filter:
                     continue
@@ -105,6 +107,7 @@ class Embedding(ABC):
 
                 total = sum(1 for _ in SeqIO.parse(fasta_io, "fasta"))
                 fasta_io.seek(0)
+                print(marker_id, total)
         
                 for record in track(SeqIO.parse(fasta_io, "fasta"), total=total):
                     species_accession = record.id
@@ -116,22 +119,29 @@ class Embedding(ABC):
                     
                     partition = partitions_dict[partition_key]
                     key = get_key(species_accession, marker_id)
+                    if not key in starting_accessions:
+                        if not generate:
+                            continue
 
-                    try:
-                        if key not in seqbank:
-                            seq = str(record.seq).replace("-","").replace("*","")
+                        seq = str(record.seq).replace("-","").replace("*","")
+                        try:
                             vector = self(seq)
-                            if vector is not None and not torch.isnan(vector).any():
-                                seqbank.add(
-                                    seq=vector.cpu().detach().clone().numpy().tobytes(),
-                                    accession=key,
-                                )
-                                seqtree.add(key, node, partition)
-                                
+                        except Exception as err:
+                            print(f"ERROR for {key} ({len(seq)}): {err}")
+                            continue
+
+                        if vector is not None and not torch.isnan(vector).any():
+                            seqbank.add(
+                                seq=vector.cpu().detach().clone().numpy().tobytes(),
+                                accession=key,
+                            )
                             del vector
-                    except Exception as err:
-                        print(f"ERROR for {key} ({len(seq)}): {err}")
-        
+                        else:
+                            print(f"Invalid result for {key} ({len(seq)}): {err}")
+                            continue
+                    
+                    seqtree.add(key, node, partition)
+                                            
         if file_stride == 0:
             seqtree.save(output_seqtree)        
         else:

@@ -68,6 +68,7 @@ class Gambit(ta.TorchApp):
             max_items=max_items,
             embedding=embedding,
         )
+        self.gene_id_dict = dataloaders.gene_id_dict
         return dataloaders
 
     def model(
@@ -75,6 +76,7 @@ class Gambit(ta.TorchApp):
         features:int=5120,
         intermediate_layers:int=0, 
         growth_factor:float=2.0,
+        family_embedding_size:int=64,
     ) -> nn.Module:
         """
         Creates a deep learning model for the Gambit to use.
@@ -87,7 +89,8 @@ class Gambit(ta.TorchApp):
             features=features,
             intermediate_layers=intermediate_layers,
             growth_factor=growth_factor,
-
+            family_embedding_size=family_embedding_size,
+            gene_family_count=len(self.gene_id_dict),
         )
 
     def loss_func(self):
@@ -134,10 +137,10 @@ class Gambit(ta.TorchApp):
                 fasta = get_subfile(gtdbtk_output, '*_protein.faa')
 
         # Create dictionary from gene id to family id from the tophits or tigrfam or pfam
-        if tigrfam and tigrfam.exists():
+        if tophits:
+            gene_family_dict = read_tophits(tophits)        
+        elif tigrfam and tigrfam.exists():
             gene_family_dict = read_tigrfam(tigrfam)
-        elif tophits:
-            gene_family_dict = read_tophits(tophits)
         elif pfam:
             gene_family_dict = read_pfam(pfam)
 
@@ -173,8 +176,8 @@ class Gambit(ta.TorchApp):
         self,
         results,
         output_csv: Path = ta.Param(default=None, help="A path to output the results as a CSV."),
+        output_gene_csv: Path = ta.Param(default=None, help="A path to output the results for individual genes as a CSV."),
         output_tips_csv: Path = ta.Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
-        output_fasta: Path = ta.Param(default=None, help="A path to output the results in FASTA format."),
         image: Path = ta.Param(default=None, help="A path to output the result as an image."),
         image_threshold:float = 0.005,
         prediction_threshold:float = ta.Param(default=0.0, help="The threshold value for making hierarchical predictions."),
@@ -251,7 +254,7 @@ class Gambit(ta.TorchApp):
                     console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
                 results_df[f"correct_{rank}"] = rank_is_correct
 
-        if not (image or output_fasta or output_csv or output_tips_csv):
+        if not (image or output_csv or output_tips_csv):
             print("No output files requested.")
 
         if output_tips_csv:
