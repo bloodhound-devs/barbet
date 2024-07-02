@@ -102,6 +102,9 @@ class Gambit(ta.TorchApp):
             for i, rank in enumerate(RANKS)
         ]
 
+    def monitor(self):
+        return RANKS[-2] # i.e. genus
+
     def inference_dataloader(
         self,
         learner,
