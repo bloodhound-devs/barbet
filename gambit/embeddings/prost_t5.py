@@ -33,8 +33,10 @@ class ProstT5Embedding(Embedding):
         with torch.no_grad():
             embedding_repr = self.model(ids.input_ids, attention_mask=ids.attention_mask)
 
-        # extract residue embeddings for the first ([0,:]) sequence in the batch and remove padded & special tokens, incl. prefix ([0,1:8]) 
-        emb_0 = embedding_repr.last_hidden_state[0] # shape (n, 1024)
+        # extract residue embeddings for the first ([0,:]) sequence in the batch and remove padded & special tokens, incl. prefix
+        emb_0 = embedding_repr.last_hidden_state[0,1:-1]
+
+        assert emb_0.shape[0] == len(seq)
 
         # if you want to derive a single representation (per-protein embedding) for the whole protein
         vector = emb_0.mean(dim=0) # shape (1024)
