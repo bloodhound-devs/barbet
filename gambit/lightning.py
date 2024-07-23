@@ -6,68 +6,81 @@ import lightning as L
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
+from torch.utils.data import Dataset
+from dataclasses import dataclass
+import os
 
 from .models import GambitModel
 
+def gene_id_from_accession(accession:str):
+    return accession.split("/")[-1]
+
+
+@dataclass
+class GambitDataset(Dataset):
+    accessions: list[str]
+    seqtree: SeqTree
+    seqbank: SeqBank
+    gene_id_dict: dict[str, int]
+
+    def __len__(self):
+        return len(self.accessions)
+
+    def __getitem__(self, idx):
+        accession = self.accessions[idx]
+        data = self.seqbank[accession]
+        array = torch.frombuffer(data, dtype=torch.float32)
+        del data
+        gene_id = gene_id_from_accession(accession)
+        return array, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
+
+
+@dataclass
 class GambitDataModule(L.LightningDataModule):
-    def prepare_data(self):
-        # download, IO, etc. Useful with shared filesystems
-        # only called on 1 GPU/TPU in distributed
-        ...
+    seqtree: SeqTree
+    seqbank: SeqBank
+    max_items: int = 0
+    batch_size: int = 32
+    num_workers: int = 0
+    validation_partition:int = 0
+
+    def __attrs_post_init__(self):
+        self.num_workers = self.num_workers or os.cpu_count()
 
     def setup(self, stage):
         # make assignments here (val/train/test split)
         # called on every process in DDP
-        training = []
-        validation = []
-        family_ids = set()
+        self.training = []
+        self.validation = []
 
-        for accession, details in seqtree.items():
+        for accession, details in self.seqtree.items():
             partition = details.partition
-            dataset = validation if partition == validation_partition else training
+            dataset = self.validation if partition == self.validation_partition else self.training
             dataset.append( accession )
 
-            gene_id = accession.split("/")[-1]
-            family_ids.add(gene_id)
-
-            if max_items and len(training) >= max_items and len(validation) > 0:
-                break
-
-        gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
+        self.train_dataset = GambitDataset(self.training, self.seqtree, self.seqbank, self.gene_id_dict)
+        self.val_dataset = GambitDataset(self.validation, self.seqtree, self.seqbank, self.gene_id_dict)
 
     def train_dataloader(self):
-        return DataLoader(self.train)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.val)
-
-    # def test_dataloader(self):
-    #     return DataLoader(self.test)
-
-    # def on_exception(self, exception):
-    #     # clean up state after the trainer faced an exception
-    #     ...
-
-    # def teardown(self):
-    #     # clean up state after the trainer stops, delete files...
-    #     # called on every process in DDP
-    #     ...
-
-
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 class GeneralLightningModule(L.LightningModule):
-    def __init__(self, model, loss_function, learning_rate):
+    def __init__(self, model, loss_function, learning_rate:float, input_count:int=1):
         super().__init__()
         self.model = model
         self.loss_function = loss_function
         self.learning_rate = learning_rate
+        self.input_count = input_count
 
     def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        x, y = batch
-        y_hat = self.model(x)
-        loss = self.loss_function(y_hat, y)
+        x = batch[:self.input_count]
+        y = batch[self.input_count:]
+        y_hat = self.model(*x)
+        loss = self.loss_function(y_hat, *y)
         return loss
 
     def configure_optimizers(self):
@@ -92,7 +105,14 @@ class GambitLightningApp():
         self.classification_tree = seqtree.classification_tree
         assert self.classification_tree is not None
 
-        self.gene_id_dict = ...
+        # Get list of gene families
+        family_ids = set()
+        for accession in seqtree:
+            gene_id = accession.split("/")[-1]
+            family_ids.add(gene_id)
+
+        self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
+
 
     def model(self) -> nn.Module:
         # TODO CLI
@@ -126,7 +146,7 @@ class GambitLightningApp():
             model=self.model(),
             loss_function=self.loss_function(),
             learning_rate=learning_rate,
-
+            input_count=1,
         )
     
     def data(self) -> Iterable|L.LightningDataModule:
@@ -142,3 +162,12 @@ class GambitLightningApp():
 
         trainer.fit( lightning_module, self.data(), validation_dataloader )
 
+
+def main():
+    app = GambitLightningApp()
+    app.setup()
+    app.fit()
+
+
+if __name__ == "__main__":
+    main()
