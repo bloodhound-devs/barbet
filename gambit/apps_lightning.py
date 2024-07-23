@@ -100,6 +100,13 @@ class GeneralLightningModule(L.LightningModule):
         loss = self.loss_function(y_hat, *y)
         return loss
 
+    def validation_step(self, batch, batch_idx):
+        x = batch[:self.input_count]
+        y = batch[self.input_count:]
+        y_hat = self.model(*x)
+        loss = self.loss_function(y_hat, *y)
+        self.log("val_loss", loss)
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
