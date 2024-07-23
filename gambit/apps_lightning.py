@@ -1,8 +1,8 @@
 import torch
 from torch import nn
+import lightning as L
 from corgi.seqtree import SeqTree
 from seqbank import SeqBank
-import lightning as L
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from dataclasses import dataclass
 import os
 
-from .models import GambitModel
+from gambit.models import GambitModel
 
 def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
@@ -39,13 +39,30 @@ class GambitDataset(Dataset):
 class GambitDataModule(L.LightningDataModule):
     seqtree: SeqTree
     seqbank: SeqBank
+    gene_id_dict: dict[str,int]
     max_items: int = 0
     batch_size: int = 32
     num_workers: int = 0
     validation_partition:int = 0
 
-    def __attrs_post_init__(self):
-        self.num_workers = self.num_workers or os.cpu_count()
+    def __init__(
+        self,
+        seqtree: SeqTree,
+        seqbank: SeqBank,
+        gene_id_dict: dict[str,int],
+        max_items: int = 0,
+        batch_size: int = 32,
+        num_workers: int = 0,
+        validation_partition:int = 0           ,
+    ):
+        super().__init__()
+        self.seqbank = seqbank
+        self.seqtree = seqtree
+        self.gene_id_dict = gene_id_dict
+        self.max_items = max_items
+        self.batch_size = batch_size
+        self.validation_partition = validation_partition
+        self.num_workers = num_workers or os.cpu_count()
 
     def setup(self, stage):
         # make assignments here (val/train/test split)
@@ -91,23 +108,23 @@ class GeneralLightningModule(L.LightningModule):
 class GambitLightningApp():
     def setup(self) -> None:
         # TODO CLI
-        seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.sb"
+        seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
         seqtree = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.st"
         #############
 
         assert seqbank is not None
         print(f"Loading seqbank {seqbank}")
-        seqbank = SeqBank(seqbank)
+        self.seqbank = SeqBank(seqbank)
 
         print(f"Loading seqtree {seqtree}")
-        seqtree = SeqTree.load(seqtree)
+        self.seqtree = SeqTree.load(seqtree)
 
-        self.classification_tree = seqtree.classification_tree
+        self.classification_tree = self.seqtree.classification_tree
         assert self.classification_tree is not None
 
         # Get list of gene families
         family_ids = set()
-        for accession in seqtree:
+        for accession in self.seqtree:
             gene_id = accession.split("/")[-1]
             family_ids.add(gene_id)
 
@@ -146,18 +163,22 @@ class GambitLightningApp():
             model=self.model(),
             loss_function=self.loss_function(),
             learning_rate=learning_rate,
-            input_count=1,
+            input_count=2,
         )
     
     def data(self) -> Iterable|L.LightningDataModule:
-        return GambitDataModule()
+        return GambitDataModule(
+            seqbank=self.seqbank,
+            seqtree=self.seqtree,
+            gene_id_dict=self.gene_id_dict,
+        )
     
     def validation_dataloader(self) -> Iterable|None:
         return None
         
     def fit(self):
-        lightning_module = self.build_lightning_module()
-        trainer = self.build_trainer()
+        lightning_module = self.lightning_module()
+        trainer = self.trainer()
         validation_dataloader = self.validation_dataloader()
 
         trainer.fit( lightning_module, self.data(), validation_dataloader )
