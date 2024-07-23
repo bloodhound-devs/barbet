@@ -36,6 +36,7 @@ jaxlib = "^0.4.28"
 wandb = "^0.17.0"
 biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module has been deprecated in 1.83 and it was not there before 1.78. Needed for alphafold >=2.3.2
 
+langevitour = "^0.7"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"

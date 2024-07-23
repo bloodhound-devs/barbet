@@ -8,6 +8,7 @@ import plotly.express as px
 import typer
 import torch
 import numpy as np
+from langevitour import Langevitour
 
 
 app = typer.Typer()
@@ -29,7 +30,6 @@ def plot_embeddings(seqtree:SeqTree, seqbank:SeqBank, gene_family_id:str="", dep
             data.append(array.numpy())
 
     data = np.array(data)
-    print(data.shape)
     
     # Do PCA with sklearn
     pca = PCA(n_components=2)
@@ -42,6 +42,14 @@ def plot_embeddings(seqtree:SeqTree, seqbank:SeqBank, gene_family_id:str="", dep
     filename = f"{gene_family_id}.png"
     print(f"Writing to {filename}")
     fig.write_image(f"{gene_family_id}.png")
+
+    tour = Langevitour(
+        data,
+        group=categories,
+        point_size=1,
+    )
+    tour.write_html(f"{gene_family_id}.html")
+
     return fig
 
 
