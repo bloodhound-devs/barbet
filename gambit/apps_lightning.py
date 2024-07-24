@@ -8,12 +8,34 @@ from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from torch.utils.data import Dataset
 from dataclasses import dataclass
+from hierarchicalsoftmax.metrics import greedy_accuracy
+from torchmetrics import Metric
 import os
+from lightning.pytorch.loggers import CSVLogger
 
-from gambit.models import GambitModel
+from .modelsx import GambitModel
 
 def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
+
+RANKS = ["phylum", "class", "order", "family", "genus", "species"]
+
+
+class GreedyAccuracyTorchMetric(Metric):
+    def __init__(self, root:SoftmaxNode, name:str="", max_depth=None):
+        super().__init__()
+        self.root = root
+        self.max_depth = max_depth
+        self.name = name or (f"greedy_accuracy_{max_depth}" if max_depth else "greedy_accuracy")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, predictions, targets):
+        self.total += targets.size(0)
+        self.correct += int(greedy_accuracy(predictions, targets, self.root, max_depth=self.max_depth) * targets.size(0))
+
+    def compute(self):
+        return self.correct / self.total
 
 
 @dataclass
@@ -75,6 +97,9 @@ class GambitDataModule(L.LightningDataModule):
             dataset = self.validation if partition == self.validation_partition else self.training
             dataset.append( accession )
 
+            if self.max_items and len(self.training) >= self.max_items and len(self.validation) > 0:
+                break
+
         self.train_dataset = GambitDataset(self.training, self.seqtree, self.seqbank, self.gene_id_dict)
         self.val_dataset = GambitDataset(self.validation, self.seqtree, self.seqbank, self.gene_id_dict)
 
@@ -86,12 +111,15 @@ class GambitDataModule(L.LightningDataModule):
 
 
 class GeneralLightningModule(L.LightningModule):
-    def __init__(self, model, loss_function, learning_rate:float, input_count:int=1):
+    def __init__(self, model, loss_function, learning_rate:float, input_count:int=1, metrics:list[tuple[str,Metric]]|None=None):
         super().__init__()
         self.model = model
         self.loss_function = loss_function
         self.learning_rate = learning_rate
         self.input_count = input_count
+        self.metrics = metrics or []
+        for name, metric in self.metrics:
+            setattr(self, name, metric)
 
     def training_step(self, batch, batch_idx):
         x = batch[:self.input_count]
@@ -106,6 +134,10 @@ class GeneralLightningModule(L.LightningModule):
         y_hat = self.model(*x)
         loss = self.loss_function(y_hat, *y)
         self.log("val_loss", loss)
+        # Metrics
+        for name, metric in self.metrics:
+            metric(y_hat, *y)
+            self.log(name, metric, on_step=False, on_epoch=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -137,7 +169,6 @@ class GambitLightningApp():
 
         self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
 
-
     def model(self) -> nn.Module:
         # TODO CLI
         features:int=5120
@@ -159,7 +190,27 @@ class GambitLightningApp():
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
     def trainer(self) -> L.Trainer:
-        return L.Trainer()
+        # TODO CLI
+        max_epochs=20
+        wandb = True
+        run_name = "lightning_test"
+        #############
+        loggers = [
+            CSVLogger("logs", name=run_name)
+        ]
+        if wandb:
+            from lightning.pytorch.loggers import WandbLogger
+            wandb_logger = WandbLogger(name=run_name)
+            loggers.append(wandb_logger)
+        
+        return L.Trainer(accelerator="gpu", logger=loggers, max_epochs=max_epochs)
+        # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
+    
+    def metrics(self) -> list[tuple[str,Metric]]:
+        return [
+            (rank, GreedyAccuracyTorchMetric(root=self.classification_tree, max_depth=i+1, name=rank))
+            for i, rank in enumerate(RANKS)
+        ]
     
     def lightning_module(self) -> L.LightningModule:
         # TODO CLI
@@ -171,13 +222,20 @@ class GambitLightningApp():
             loss_function=self.loss_function(),
             learning_rate=learning_rate,
             input_count=2,
+            metrics=self.metrics(),
         )
     
     def data(self) -> Iterable|L.LightningDataModule:
+        # TODO CLI
+        max_items = 0        
+        # max_items=100
+        #############
+
         return GambitDataModule(
             seqbank=self.seqbank,
             seqtree=self.seqtree,
             gene_id_dict=self.gene_id_dict,
+            max_items=max_items,
         )
     
     def validation_dataloader(self) -> Iterable|None:
@@ -188,12 +246,19 @@ class GambitLightningApp():
         trainer = self.trainer()
         validation_dataloader = self.validation_dataloader()
 
+        # Dummy data to set the number of weights in the model
+        dummy_input = torch.randn(2, 512)#.cuda()
+        dummy_input2 = torch.randint(low=0, high=6, size=(2,))#.cuda()
+        with torch.no_grad():
+            lightning_module.model(dummy_input, dummy_input2)
+
         trainer.fit( lightning_module, self.data(), validation_dataloader )
 
 
 def main():
     app = GambitLightningApp()
     app.setup()
+    
     app.fit()
 
 

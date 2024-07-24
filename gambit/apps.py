@@ -14,7 +14,7 @@ from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions
 import pandas as pd
 
 
-from .models import GambitModel
+from .modelsx import GambitModel
 from .dataloaders import create_dataloaders, seqbank_dataloader
 from .embedding import get_key
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
