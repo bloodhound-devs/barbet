@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
 from torchmetrics import Metric
 import os
+import time
+
 from lightning.pytorch.loggers import CSVLogger
 
 from .modelsx import GambitModel
@@ -19,6 +21,20 @@ def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
 
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
+
+
+
+class TimeLoggingCallback(L.Callback):
+    def __init__(self):
+        super().__init__()
+        self.epoch_start_time = None
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        self.epoch_start_time = time.time()
+
+    def on_train_epoch_end(self, trainer, pl_module, outputs):
+        epoch_duration = time.time() - self.epoch_start_time
+        pl_module.log('epoch_time', epoch_duration, prog_bar=True)
 
 
 class GreedyAccuracyTorchMetric(Metric):
@@ -189,6 +205,11 @@ class GambitLightningApp():
     def loss_function(self):
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
+    def callbacks(self):
+        return [
+            TimeLoggingCallback(),
+        ]
+    
     def trainer(self) -> L.Trainer:
         # TODO CLI
         max_epochs=20
@@ -203,7 +224,7 @@ class GambitLightningApp():
             wandb_logger = WandbLogger(name=run_name)
             loggers.append(wandb_logger)
         
-        return L.Trainer(accelerator="gpu", logger=loggers, max_epochs=max_epochs)
+        return L.Trainer(accelerator="gpu", logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
         # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
     
     def metrics(self) -> list[tuple[str,Metric]]:
