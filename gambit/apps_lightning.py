@@ -4,12 +4,15 @@ import lightning as L
 from corgi.seqtree import SeqTree
 from seqbank import SeqBank
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
+from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from torch.utils.data import Dataset
 from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
 from torchmetrics import Metric
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 import os
 import time
 
@@ -32,26 +35,26 @@ class TimeLoggingCallback(L.Callback):
     def on_train_epoch_start(self, trainer, pl_module):
         self.epoch_start_time = time.time()
 
-    def on_train_epoch_end(self, trainer, pl_module, outputs):
+    def on_train_epoch_end(self, trainer, pl_module):
         epoch_duration = time.time() - self.epoch_start_time
         pl_module.log('epoch_time', epoch_duration, prog_bar=True)
 
 
-class GreedyAccuracyTorchMetric(Metric):
-    def __init__(self, root:SoftmaxNode, name:str="", max_depth=None):
-        super().__init__()
-        self.root = root
-        self.max_depth = max_depth
-        self.name = name or (f"greedy_accuracy_{max_depth}" if max_depth else "greedy_accuracy")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+# class GreedyAccuracyTorchMetric(Metric):
+#     def __init__(self, root:SoftmaxNode, name:str="", max_depth=None):
+#         super().__init__()
+#         self.root = root
+#         self.max_depth = max_depth
+#         self.name = name or (f"greedy_accuracy_{max_depth}" if max_depth else "greedy_accuracy")
+#         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+#         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions, targets):
-        self.total += targets.size(0)
-        self.correct += int(greedy_accuracy(predictions, targets, self.root, max_depth=self.max_depth) * targets.size(0))
+#     def update(self, predictions, targets):
+#         self.total += targets.size(0)
+#         self.correct += int(greedy_accuracy(predictions, targets, self.root, max_depth=self.max_depth) * targets.size(0))
 
-    def compute(self):
-        return self.correct / self.total
+#     def compute(self):
+#         return self.correct / self.total
 
 
 @dataclass
@@ -79,7 +82,7 @@ class GambitDataModule(L.LightningDataModule):
     seqbank: SeqBank
     gene_id_dict: dict[str,int]
     max_items: int = 0
-    batch_size: int = 32
+    batch_size: int = 16
     num_workers: int = 0
     validation_partition:int = 0
 
@@ -89,7 +92,7 @@ class GambitDataModule(L.LightningDataModule):
         seqbank: SeqBank,
         gene_id_dict: dict[str,int],
         max_items: int = 0,
-        batch_size: int = 32,
+        batch_size: int = 16,
         num_workers: int = 0,
         validation_partition:int = 0           ,
     ):
@@ -102,7 +105,7 @@ class GambitDataModule(L.LightningDataModule):
         self.validation_partition = validation_partition
         self.num_workers = num_workers or os.cpu_count()
 
-    def setup(self, stage):
+    def setup(self, stage=None):
         # make assignments here (val/train/test split)
         # called on every process in DDP
         self.training = []
@@ -127,14 +130,14 @@ class GambitDataModule(L.LightningDataModule):
 
 
 class GeneralLightningModule(L.LightningModule):
-    def __init__(self, model, loss_function, learning_rate:float, input_count:int=1, metrics:list[tuple[str,Metric]]|None=None):
+    def __init__(self, model, loss_function, max_learning_rate:float, input_count:int=1, metrics:list[tuple[str,Metric]]|None=None):
         super().__init__()
         self.model = model
         self.loss_function = loss_function
-        self.learning_rate = learning_rate
+        self.max_learning_rate = max_learning_rate
         self.input_count = input_count
-        self.metrics = metrics or []
-        for name, metric in self.metrics:
+        self.metricks = metrics or []
+        for name, metric in self.metricks:
             setattr(self, name, metric)
 
     def training_step(self, batch, batch_idx):
@@ -151,20 +154,49 @@ class GeneralLightningModule(L.LightningModule):
         loss = self.loss_function(y_hat, *y)
         self.log("val_loss", loss)
         # Metrics
-        for name, metric in self.metrics:
-            metric(y_hat, *y)
-            self.log(name, metric, on_step=False, on_epoch=True)
+        for name, metric in self.metricks:
+            result = metric(y_hat, *y)
+            if isinstance(result, dict):
+                for key, value in result.items():
+                    self.log(key, value, on_step=False, on_epoch=True)
+            else:
+                self.log(name, metric, on_step=False, on_epoch=True)
+    
+    def optimizer(self) -> optim.Optimizer:
+        return torch.optim.Adam(self.parameters(), lr=0.1*self.max_learning_rate)
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+    def scheduler(self, optimizer) -> lr_scheduler._LRScheduler:
+        return lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.max_learning_rate,
+            steps_per_epoch=len(self.trainer.datamodule.train_dataloader()),
+            epochs=self.trainer.max_epochs,
+        )
+
+    def lr_scheduler_config(self, optimizer:optim.Optimizer) -> dict:
+        return {
+            'scheduler': self.scheduler(optimizer),
+            'interval': 'step',
+        }
+
+    def configure_optimizers(self) -> dict:
+        # https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
+        optimizer = self.optimizer()
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": self.lr_scheduler_config(optimizer=optimizer),
+        }
 
 
 class GambitLightningApp():
     def setup(self) -> None:
         # TODO CLI
-        seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
-        seqtree = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.st"
+        # seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
+        # seqtree = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.st"
+
+        esm_layers = 6 
+        seqbank = f"/home/rturnbull/wytamma/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.sb"
+        seqtree = f"/home/rturnbull/wytamma/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.st"
         #############
 
         assert seqbank is not None
@@ -187,8 +219,8 @@ class GambitLightningApp():
 
     def model(self) -> nn.Module:
         # TODO CLI
-        features:int=5120
-        intermediate_layers:int=0 
+        features:int=1024
+        intermediate_layers:int=2
         growth_factor:float=2.0
         family_embedding_size:int=64
         #############
@@ -214,13 +246,20 @@ class GambitLightningApp():
         # TODO CLI
         max_epochs=20
         wandb = True
-        run_name = "lightning_test"
+        run_name = "lightning-ar53-esm6-b16f1024l2g2"
+        wandb_project = "Gambit"
+        wandb_entity = "mariadelmarq-The University of Melbourne"
         #############
         loggers = [
             CSVLogger("logs", name=run_name)
         ]
         if wandb:
             from lightning.pytorch.loggers import WandbLogger
+            if wandb_project:
+                os.environ["WANDB_PROJECT"] = wandb_project
+            if wandb_entity:
+                os.environ["WANDB_ENTITY"] = wandb_entity
+
             wandb_logger = WandbLogger(name=run_name)
             loggers.append(wandb_logger)
         
@@ -228,20 +267,26 @@ class GambitLightningApp():
         # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
     
     def metrics(self) -> list[tuple[str,Metric]]:
-        return [
-            (rank, GreedyAccuracyTorchMetric(root=self.classification_tree, max_depth=i+1, name=rank))
-            for i, rank in enumerate(RANKS)
-        ]
+        rank_accuracy = RankAccuracyTorchMetric(
+            root=self.classification_tree, 
+            ranks={1+i:rank for i, rank in enumerate(RANKS)},
+        )
+                
+        return [('rank_accuracy', rank_accuracy)]
+        # return [
+        #     (rank, GreedyAccuracyTorchMetric(root=self.classification_tree, max_depth=i+1, name=rank))
+        #     for i, rank in enumerate(RANKS)
+        # ]
     
     def lightning_module(self) -> L.LightningModule:
         # TODO CLI
-        learning_rate = 1e-4
+        max_learning_rate = 1e-4
         #############
 
         return GeneralLightningModule(
             model=self.model(),
             loss_function=self.loss_function(),
-            learning_rate=learning_rate,
+            max_learning_rate=max_learning_rate,
             input_count=2,
             metrics=self.metrics(),
         )
@@ -249,7 +294,7 @@ class GambitLightningApp():
     def data(self) -> Iterable|L.LightningDataModule:
         # TODO CLI
         max_items = 0        
-        # max_items=100
+        # max_items=1000
         #############
 
         return GambitDataModule(
@@ -263,17 +308,20 @@ class GambitLightningApp():
         return None
         
     def fit(self):
+        data = self.data()
+        data.setup()
+
         lightning_module = self.lightning_module()
         trainer = self.trainer()
         validation_dataloader = self.validation_dataloader()
 
         # Dummy data to set the number of weights in the model
-        dummy_input = torch.randn(2, 512)#.cuda()
-        dummy_input2 = torch.randint(low=0, high=6, size=(2,))#.cuda()
+        dummy_batch = next(iter(data.train_dataloader()))
+        dummy_x = dummy_batch[:lightning_module.input_count]
         with torch.no_grad():
-            lightning_module.model(dummy_input, dummy_input2)
+            lightning_module.model(*dummy_x)
 
-        trainer.fit( lightning_module, self.data(), validation_dataloader )
+        trainer.fit( lightning_module, data, validation_dataloader )
 
 
 def main():
