@@ -25,6 +25,39 @@ def gene_id_from_accession(accession:str):
 
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
+esm_layers = 6
+
+class AvgSmoothLoss(Metric):
+    def __init__(self, beta=0.98, dist_sync_on_step=False):
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+        self.beta = beta
+        self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("val", default=torch.tensor(0.), dist_reduce_fx="sum")
+
+    def reset(self):
+        self.count = torch.tensor(0)
+        self.val = torch.tensor(0.)
+
+    def update(self, loss):
+        # Ensure loss is detached to avoid graph-related issues
+        loss = loss.detach()
+        self.count += 1
+        self.val = torch.lerp(loss.mean(), self.val, self.beta)
+
+    def compute(self):
+        # Return the smoothed loss value
+        return self.val / (1 - self.beta**self.count)
+
+
+class LogOptimizerCallback(L.Callback):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        optimizer = trainer.optimizers[0]
+        for param_group in optimizer.param_groups:
+            pl_module.log('lr_0', param_group['lr'])
+            pl_module.log('mom_0', param_group['betas'][0]) # HACK
+            pl_module.log('beta_1', param_group['betas'][1])
+            pl_module.log('wd_0', param_group['weight_decay'])
+            pl_module.log('eps_0', param_group['eps'])
 
 
 class TimeLoggingCallback(L.Callback):
@@ -123,10 +156,10 @@ class GambitDataModule(L.LightningDataModule):
         self.val_dataset = GambitDataset(self.validation, self.seqtree, self.seqbank, self.gene_id_dict)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
 class GeneralLightningModule(L.LightningModule):
@@ -136,6 +169,7 @@ class GeneralLightningModule(L.LightningModule):
         self.loss_function = loss_function
         self.max_learning_rate = max_learning_rate
         self.input_count = input_count
+        self.smooth_loss = AvgSmoothLoss()
         self.metricks = metrics or []
         for name, metric in self.metricks:
             setattr(self, name, metric)
@@ -145,6 +179,11 @@ class GeneralLightningModule(L.LightningModule):
         y = batch[self.input_count:]
         y_hat = self.model(*x)
         loss = self.loss_function(y_hat, *y)
+        self.log("raw_loss", loss, on_step=True, on_epoch=False)
+
+        self.smooth_loss.update(loss)
+        self.log("train_loss", self.smooth_loss.compute(), on_step=True, on_epoch=False)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -152,7 +191,7 @@ class GeneralLightningModule(L.LightningModule):
         y = batch[self.input_count:]
         y_hat = self.model(*x)
         loss = self.loss_function(y_hat, *y)
-        self.log("val_loss", loss)
+        self.log("valid_loss", loss)
         # Metrics
         for name, metric in self.metricks:
             result = metric(y_hat, *y)
@@ -163,7 +202,7 @@ class GeneralLightningModule(L.LightningModule):
                 self.log(name, metric, on_step=False, on_epoch=True)
     
     def optimizer(self) -> optim.Optimizer:
-        return torch.optim.Adam(self.parameters(), lr=0.1*self.max_learning_rate)
+        return torch.optim.AdamW(self.parameters(), lr=0.1*self.max_learning_rate, weight_decay=0.01, eps=1e-5)
 
     def scheduler(self, optimizer) -> lr_scheduler._LRScheduler:
         return lr_scheduler.OneCycleLR(
@@ -194,9 +233,10 @@ class GambitLightningApp():
         # seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
         # seqtree = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.st"
 
-        esm_layers = 6 
-        seqbank = f"/home/rturnbull/wytamma/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.sb"
-        seqtree = f"/home/rturnbull/wytamma/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.st"
+        # esm_layers = 30
+        
+        seqbank = f"/data/projects/punim2199/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.sb"
+        seqtree = f"/data/projects/punim2199/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.st"
         #############
 
         assert seqbank is not None
@@ -222,7 +262,7 @@ class GambitLightningApp():
         features:int=1024
         intermediate_layers:int=2
         growth_factor:float=2.0
-        family_embedding_size:int=64
+        family_embedding_size:int=128
         #############
 
         return GambitModel(
@@ -240,13 +280,14 @@ class GambitLightningApp():
     def callbacks(self):
         return [
             TimeLoggingCallback(),
+            LogOptimizerCallback(),
         ]
     
     def trainer(self) -> L.Trainer:
         # TODO CLI
         max_epochs=20
         wandb = True
-        run_name = "lightning-ar53-esm6-b16f1024l2g2"
+        run_name = f"lightning-ar53-esm{esm_layers}-b16f1024l2g2e128-lr-AdamW-shuffle2"
         wandb_project = "Gambit"
         wandb_entity = "mariadelmarq-The University of Melbourne"
         #############
