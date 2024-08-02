@@ -26,6 +26,7 @@ def gene_id_from_accession(accession:str):
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
 esm_layers = 6
+DOMAIN = "bac120"
 
 class AvgSmoothLoss(Metric):
     def __init__(self, beta=0.98, dist_sync_on_step=False):
@@ -174,6 +175,10 @@ class GeneralLightningModule(L.LightningModule):
         for name, metric in self.metricks:
             setattr(self, name, metric)
 
+        gpus = torch.cuda.device_count()
+        self.current_step = 0
+        self.steps_per_epoch = len(self.trainer.datamodule.train_dataloader())//gpus # HACK assumes DDP strategy
+
     def training_step(self, batch, batch_idx):
         x = batch[:self.input_count]
         y = batch[self.input_count:]
@@ -184,6 +189,11 @@ class GeneralLightningModule(L.LightningModule):
         self.smooth_loss.update(loss)
         self.log("train_loss", self.smooth_loss.compute(), on_step=True, on_epoch=False)
 
+        # Log the fractional epoch
+        self.current_step += 1
+        fractional_epoch = self.current_epoch + (self.current_step / self.steps_per_epoch)
+        self.log('fractional_epoch', fractional_epoch, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -191,15 +201,18 @@ class GeneralLightningModule(L.LightningModule):
         y = batch[self.input_count:]
         y_hat = self.model(*x)
         loss = self.loss_function(y_hat, *y)
-        self.log("valid_loss", loss)
+        self.log("valid_loss", loss, sync_dist=True)
         # Metrics
         for name, metric in self.metricks:
             result = metric(y_hat, *y)
             if isinstance(result, dict):
                 for key, value in result.items():
-                    self.log(key, value, on_step=False, on_epoch=True)
+                    self.log(key, value, on_step=False, on_epoch=True, sync_dist=True)
             else:
-                self.log(name, metric, on_step=False, on_epoch=True)
+                self.log(name, metric, on_step=False, on_epoch=True, sync_dist=True)
+
+    def on_epoch_end(self):
+        self.current_step = 0
     
     def optimizer(self) -> optim.Optimizer:
         return torch.optim.AdamW(self.parameters(), lr=0.1*self.max_learning_rate, weight_decay=0.01, eps=1e-5)
@@ -208,7 +221,7 @@ class GeneralLightningModule(L.LightningModule):
         return lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.max_learning_rate,
-            steps_per_epoch=len(self.trainer.datamodule.train_dataloader()),
+            steps_per_epoch=self.steps_per_epoch,
             epochs=self.trainer.max_epochs,
         )
 
@@ -235,8 +248,9 @@ class GambitLightningApp():
 
         # esm_layers = 30
         
-        seqbank = f"/data/projects/punim2199/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.sb"
-        seqtree = f"/data/projects/punim2199/rob/release220/ar53/esm{esm_layers}/esm{esm_layers}.st"
+
+        seqbank = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.sb"
+        seqtree = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.st"
         #############
 
         assert seqbank is not None
@@ -287,7 +301,7 @@ class GambitLightningApp():
         # TODO CLI
         max_epochs=20
         wandb = True
-        run_name = f"lightning-ar53-esm{esm_layers}-b16f1024l2g2e128-lr-AdamW-shuffle2"
+        run_name = f"lightning-{DOMAIN}-esm{esm_layers}-b16f1024l2g2e128lr2E-3-gpu2-1cy"
         wandb_project = "Gambit"
         wandb_entity = "mariadelmarq-The University of Melbourne"
         #############
@@ -304,7 +318,20 @@ class GambitLightningApp():
             wandb_logger = WandbLogger(name=run_name)
             loggers.append(wandb_logger)
         
-        return L.Trainer(accelerator="gpu", logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
+        gpus = torch.cuda.device_count()
+
+        # If GPUs are available, use them; otherwise, use CPUs
+        if gpus > 1:
+            devices = gpus
+            strategy = 'ddp'  # Distributed Data Parallel
+        elif gpus == 1:
+            devices = 1
+            strategy = None
+        else:
+            devices = 'auto'  # Will use CPU if no GPU is available
+            strategy = None
+
+        return L.Trainer(accelerator="gpu", devices=devices, strategy=strategy, logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
         # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
     
     def metrics(self) -> list[tuple[str,Metric]]:
@@ -321,7 +348,7 @@ class GambitLightningApp():
     
     def lightning_module(self) -> L.LightningModule:
         # TODO CLI
-        max_learning_rate = 1e-4
+        max_learning_rate = 2e-4
         #############
 
         return GeneralLightningModule(
