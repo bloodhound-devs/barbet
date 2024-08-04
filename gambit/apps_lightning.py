@@ -14,11 +14,8 @@ from torch.utils.data import Dataset
 from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
 from torchmetrics import Metric
-import torch.optim as optim
-import torch.optim.lr_scheduler as lr_scheduler
 import os
-from functools import cached_property
-import time
+
 
 from lightning.pytorch.loggers import CSVLogger
 
@@ -32,69 +29,6 @@ RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 esm_layers = 6
 DOMAIN = "bac120"
 # DOMAIN = "ar53"
-
-
-class AvgSmoothLoss(Metric):
-    def __init__(self, beta=0.98, dist_sync_on_step=False):
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
-        self.beta = beta
-        self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("val", default=torch.tensor(0.), dist_reduce_fx="sum")
-
-    def reset(self):
-        self.count = torch.tensor(0)
-        self.val = torch.tensor(0.)
-
-    def update(self, loss):
-        # Ensure loss is detached to avoid graph-related issues
-        loss = loss.detach()
-        self.count += 1
-        self.val = torch.lerp(loss.mean(), self.val, self.beta)
-
-    def compute(self):
-        # Return the smoothed loss value
-        return self.val / (1 - self.beta**self.count)
-
-
-class LogOptimizerCallback(L.Callback):
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        optimizer = trainer.optimizers[0]
-        for param_group in optimizer.param_groups:
-            pl_module.log('lr_0', param_group['lr'])
-            pl_module.log('mom_0', param_group['betas'][0]) # HACK
-            pl_module.log('beta_1', param_group['betas'][1])
-            pl_module.log('wd_0', param_group['weight_decay'])
-            pl_module.log('eps_0', param_group['eps'])
-
-
-class TimeLoggingCallback(L.Callback):
-    def __init__(self):
-        super().__init__()
-        self.epoch_start_time = None
-
-    def on_train_epoch_start(self, trainer, pl_module):
-        self.epoch_start_time = time.time()
-
-    def on_train_epoch_end(self, trainer, pl_module):
-        epoch_duration = time.time() - self.epoch_start_time
-        pl_module.log('epoch_time', epoch_duration, prog_bar=True)
-
-
-# class GreedyAccuracyTorchMetric(Metric):
-#     def __init__(self, root:SoftmaxNode, name:str="", max_depth=None):
-#         super().__init__()
-#         self.root = root
-#         self.max_depth = max_depth
-#         self.name = name or (f"greedy_accuracy_{max_depth}" if max_depth else "greedy_accuracy")
-#         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-#         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
-
-#     def update(self, predictions, targets):
-#         self.total += targets.size(0)
-#         self.correct += int(greedy_accuracy(predictions, targets, self.root, max_depth=self.max_depth) * targets.size(0))
-
-#     def compute(self):
-#         return self.correct / self.total
 
 
 @dataclass
@@ -139,7 +73,7 @@ class GambitDataModule(L.LightningDataModule):
         max_items: int = 0,
         batch_size: int = 16,
         num_workers: int = 0,
-        validation_partition:int = 0           ,
+        validation_partition:int = 0,
     ):
         super().__init__()
         self.array = array
@@ -184,87 +118,7 @@ class GambitDataModule(L.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
-class GeneralLightningModule(L.LightningModule):
-    def __init__(self, model, loss_function, max_learning_rate:float, input_count:int=1, metrics:list[tuple[str,Metric]]|None=None):
-        super().__init__()
-        self.model = model
-        self.loss_function = loss_function
-        self.max_learning_rate = max_learning_rate
-        self.input_count = input_count
-        self.smooth_loss = AvgSmoothLoss()
-        self.metricks = metrics or []
-        for name, metric in self.metricks:
-            setattr(self, name, metric)        
-        self.current_step = 0
-
-    @cached_property
-    def steps_per_epoch(self) -> int:
-        # HACK assumes DDP strategy
-        gpus = torch.cuda.device_count()
-        return len(self.trainer.datamodule.train_dataloader())//gpus
-
-    def training_step(self, batch, batch_idx):
-        x = batch[:self.input_count]
-        y = batch[self.input_count:]
-        y_hat = self.model(*x)
-        loss = self.loss_function(y_hat, *y)
-        self.log("raw_loss", loss, on_step=True, on_epoch=False)
-
-        self.smooth_loss.update(loss)
-        self.log("train_loss", self.smooth_loss.compute(), on_step=True, on_epoch=False)
-
-        # Log the fractional epoch
-        self.current_step += 1
-        fractional_epoch = self.current_epoch + ((self.current_step%self.steps_per_epoch) / self.steps_per_epoch)
-        self.log('fractional_epoch', fractional_epoch, on_step=True, on_epoch=False, prog_bar=False, logger=True)
-
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x = batch[:self.input_count]
-        y = batch[self.input_count:]
-        y_hat = self.model(*x)
-        loss = self.loss_function(y_hat, *y)
-        self.log("valid_loss", loss, sync_dist=True)
-        # Metrics
-        for name, metric in self.metricks:
-            result = metric(y_hat, *y)
-            if isinstance(result, dict):
-                for key, value in result.items():
-                    self.log(key, value, on_step=False, on_epoch=True, sync_dist=True)
-            else:
-                self.log(name, metric, on_step=False, on_epoch=True, sync_dist=True)
-
-    def on_epoch_end(self):
-        self.current_step = 0
-    
-    def optimizer(self) -> optim.Optimizer:
-        return torch.optim.AdamW(self.parameters(), lr=0.1*self.max_learning_rate, weight_decay=0.01, eps=1e-5)
-
-    def scheduler(self, optimizer) -> lr_scheduler._LRScheduler:
-        return lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=self.max_learning_rate,
-            steps_per_epoch=self.steps_per_epoch,
-            epochs=self.trainer.max_epochs,
-        )
-
-    def lr_scheduler_config(self, optimizer:optim.Optimizer) -> dict:
-        return {
-            'scheduler': self.scheduler(optimizer),
-            'interval': 'step',
-        }
-
-    def configure_optimizers(self) -> dict:
-        # https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
-        optimizer = self.optimizer()
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": self.lr_scheduler_config(optimizer=optimizer),
-        }
-
-
-class GambitLightningApp():
+class Gambit(TorchApp2):
     def setup(self) -> None:
         # TODO CLI
         # seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
