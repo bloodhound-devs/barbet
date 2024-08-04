@@ -19,7 +19,9 @@ import os
 
 from lightning.pytorch.loggers import CSVLogger
 
+from .torchapp2.apps import TorchApp2
 from .modelsx import GambitModel
+
 
 def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
