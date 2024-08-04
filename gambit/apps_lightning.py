@@ -1,4 +1,7 @@
+import psutil
 import torch
+import numpy as np
+from pathlib import Path
 from torch import nn
 import lightning as L
 from corgi.seqtree import SeqTree
@@ -14,6 +17,7 @@ from torchmetrics import Metric
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import os
+from functools import cached_property
 import time
 
 from lightning.pytorch.loggers import CSVLogger
@@ -27,6 +31,8 @@ RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
 esm_layers = 6
 DOMAIN = "bac120"
+# DOMAIN = "ar53"
+
 
 class AvgSmoothLoss(Metric):
     def __init__(self, beta=0.98, dist_sync_on_step=False):
@@ -95,7 +101,9 @@ class TimeLoggingCallback(L.Callback):
 class GambitDataset(Dataset):
     accessions: list[str]
     seqtree: SeqTree
-    seqbank: SeqBank
+    # seqbank: SeqBank
+    array:np.memmap|np.ndarray
+    accession_to_array_index:dict[str,int]
     gene_id_dict: dict[str, int]
 
     def __len__(self):
@@ -103,17 +111,18 @@ class GambitDataset(Dataset):
 
     def __getitem__(self, idx):
         accession = self.accessions[idx]
-        data = self.seqbank[accession]
-        array = torch.frombuffer(data, dtype=torch.float32)
-        del data
+        array_index = self.accession_to_array_index[accession]
+        embedding = torch.tensor(self.array[array_index,:], dtype=torch.float16)
         gene_id = gene_id_from_accession(accession)
-        return array, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
+        return embedding, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
 
 
 @dataclass
 class GambitDataModule(L.LightningDataModule):
     seqtree: SeqTree
-    seqbank: SeqBank
+    # seqbank: SeqBank
+    array:np.memmap|np.ndarray
+    accession_to_array_index:dict[str,int]
     gene_id_dict: dict[str,int]
     max_items: int = 0
     batch_size: int = 16
@@ -123,7 +132,9 @@ class GambitDataModule(L.LightningDataModule):
     def __init__(
         self,
         seqtree: SeqTree,
-        seqbank: SeqBank,
+        array:np.memmap|np.ndarray,
+        accession_to_array_index:dict[str,int],
+        # seqbank: SeqBank,
         gene_id_dict: dict[str,int],
         max_items: int = 0,
         batch_size: int = 16,
@@ -131,7 +142,8 @@ class GambitDataModule(L.LightningDataModule):
         validation_partition:int = 0           ,
     ):
         super().__init__()
-        self.seqbank = seqbank
+        self.array = array
+        self.accession_to_array_index = accession_to_array_index
         self.seqtree = seqtree
         self.gene_id_dict = gene_id_dict
         self.max_items = max_items
@@ -153,9 +165,18 @@ class GambitDataModule(L.LightningDataModule):
             if self.max_items and len(self.training) >= self.max_items and len(self.validation) > 0:
                 break
 
-        self.train_dataset = GambitDataset(self.training, self.seqtree, self.seqbank, self.gene_id_dict)
-        self.val_dataset = GambitDataset(self.validation, self.seqtree, self.seqbank, self.gene_id_dict)
+        self.train_dataset = self.create_dataset(self.training)
+        self.val_dataset = self.create_dataset(self.validation)
 
+    def create_dataset(self, accessions:list[str]) -> GambitDataset:
+        return GambitDataset(
+            accessions=accessions, 
+            seqtree=self.seqtree, 
+            array=self.array,
+            accession_to_array_index=self.accession_to_array_index,
+            gene_id_dict=self.gene_id_dict,
+        )
+    
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
@@ -173,11 +194,14 @@ class GeneralLightningModule(L.LightningModule):
         self.smooth_loss = AvgSmoothLoss()
         self.metricks = metrics or []
         for name, metric in self.metricks:
-            setattr(self, name, metric)
-
-        gpus = torch.cuda.device_count()
+            setattr(self, name, metric)        
         self.current_step = 0
-        self.steps_per_epoch = len(self.trainer.datamodule.train_dataloader())//gpus # HACK assumes DDP strategy
+
+    @cached_property
+    def steps_per_epoch(self) -> int:
+        # HACK assumes DDP strategy
+        gpus = torch.cuda.device_count()
+        return len(self.trainer.datamodule.train_dataloader())//gpus
 
     def training_step(self, batch, batch_idx):
         x = batch[:self.input_count]
@@ -191,8 +215,8 @@ class GeneralLightningModule(L.LightningModule):
 
         # Log the fractional epoch
         self.current_step += 1
-        fractional_epoch = self.current_epoch + (self.current_step / self.steps_per_epoch)
-        self.log('fractional_epoch', fractional_epoch, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        fractional_epoch = self.current_epoch + ((self.current_step%self.steps_per_epoch) / self.steps_per_epoch)
+        self.log('fractional_epoch', fractional_epoch, on_step=True, on_epoch=False, prog_bar=False, logger=True)
 
         return loss
 
@@ -248,14 +272,33 @@ class GambitLightningApp():
 
         # esm_layers = 30
         
-
-        seqbank = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.sb"
+        # seqbank = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.sb"
+        memmap = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.np"
+        memmap_index = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.txt"
         seqtree = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.st"
         #############
 
-        assert seqbank is not None
-        print(f"Loading seqbank {seqbank}")
-        self.seqbank = SeqBank(seqbank)
+        # assert seqbank is not None
+        # print(f"Loading seqbank {seqbank}")
+        # self.seqbank = SeqBank(seqbank)
+        print(f"Loading memmap")
+        dtype = "float16"
+        self.accession_to_array_index = dict()
+        with open(memmap_index) as f:
+            for i, accession in enumerate(f):
+                self.accession_to_array_index[accession.strip()] = i
+        count = len(self.accession_to_array_index)
+        file_size = os.path.getsize(memmap)
+        dtype_size = np.dtype(dtype).itemsize
+        num_elements = file_size // dtype_size
+        embedding_size = num_elements // count
+        shape = (count, embedding_size)
+        self.array = np.memmap(memmap, dtype=dtype, mode='r', shape=shape)
+
+        # If there's enough memory, then read into RAM
+        memory_info = psutil.virtual_memory()
+        if memory_info.available > file_size * 2:
+            self.array = np.array(self.array)
 
         print(f"Loading seqtree {seqtree}")
         self.seqtree = SeqTree.load(seqtree)
@@ -300,8 +343,8 @@ class GambitLightningApp():
     def trainer(self) -> L.Trainer:
         # TODO CLI
         max_epochs=20
-        wandb = True
-        run_name = f"lightning-{DOMAIN}-esm{esm_layers}-b16f1024l2g2e128lr2E-3-gpu2-1cy"
+        wandb = False
+        run_name = f"lightning-{DOMAIN}-esm{esm_layers}-b16f1024l2g2e128lr1E-4-memmap"
         wandb_project = "Gambit"
         wandb_entity = "mariadelmarq-The University of Melbourne"
         #############
@@ -324,12 +367,9 @@ class GambitLightningApp():
         if gpus > 1:
             devices = gpus
             strategy = 'ddp'  # Distributed Data Parallel
-        elif gpus == 1:
-            devices = 1
-            strategy = None
         else:
-            devices = 'auto'  # Will use CPU if no GPU is available
-            strategy = None
+            devices = "auto"  # Will use CPU if no GPU is available
+            strategy = "auto"
 
         return L.Trainer(accelerator="gpu", devices=devices, strategy=strategy, logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
         # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
@@ -348,7 +388,7 @@ class GambitLightningApp():
     
     def lightning_module(self) -> L.LightningModule:
         # TODO CLI
-        max_learning_rate = 2e-4
+        max_learning_rate = 1e-4
         #############
 
         return GeneralLightningModule(
@@ -366,7 +406,9 @@ class GambitLightningApp():
         #############
 
         return GambitDataModule(
-            seqbank=self.seqbank,
+            # seqbank=self.seqbank,
+            array=self.array,
+            accession_to_array_index=self.accession_to_array_index,
             seqtree=self.seqtree,
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
