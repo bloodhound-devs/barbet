@@ -188,12 +188,6 @@ class Gambit(TorchApp2):
     def loss_function(self):
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
-    def callbacks(self):
-        return [
-            TimeLoggingCallback(),
-            LogOptimizerCallback(),
-        ]
-    
     def trainer(self) -> L.Trainer:
         # TODO CLI
         max_epochs=20
