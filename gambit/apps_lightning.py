@@ -16,9 +16,9 @@ from hierarchicalsoftmax.metrics import greedy_accuracy
 from torchmetrics import Metric
 import os
 
-
 from lightning.pytorch.loggers import CSVLogger
 
+from .torchapp2.cli import method, command
 from .torchapp2.apps import TorchApp2
 from .modelsx import GambitModel
 
@@ -121,6 +121,7 @@ class GambitDataModule(L.LightningDataModule):
 
 
 class Gambit(TorchApp2):
+    @method
     def setup(self) -> None:
         # TODO CLI
         # seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
@@ -170,6 +171,7 @@ class Gambit(TorchApp2):
 
         self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
 
+    @method
     def model(self) -> nn.Module:
         # TODO CLI
         features:int=1024
@@ -187,43 +189,15 @@ class Gambit(TorchApp2):
             gene_family_count=len(self.gene_id_dict),
         )
     
+    @command
+    def input_count(self) -> int:
+        return 2
+            
+    @method
     def loss_function(self):
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
-    def trainer(self) -> L.Trainer:
-        # TODO CLI
-        max_epochs=20
-        wandb = False
-        run_name = f"lightning-{DOMAIN}-esm{esm_layers}-b16f1024l2g2e128lr1E-4-memmap"
-        wandb_project = "Gambit"
-        wandb_entity = "mariadelmarq-The University of Melbourne"
-        #############
-        loggers = [
-            CSVLogger("logs", name=run_name)
-        ]
-        if wandb:
-            from lightning.pytorch.loggers import WandbLogger
-            if wandb_project:
-                os.environ["WANDB_PROJECT"] = wandb_project
-            if wandb_entity:
-                os.environ["WANDB_ENTITY"] = wandb_entity
-
-            wandb_logger = WandbLogger(name=run_name)
-            loggers.append(wandb_logger)
-        
-        gpus = torch.cuda.device_count()
-
-        # If GPUs are available, use them; otherwise, use CPUs
-        if gpus > 1:
-            devices = gpus
-            strategy = 'ddp'  # Distributed Data Parallel
-        else:
-            devices = "auto"  # Will use CPU if no GPU is available
-            strategy = "auto"
-
-        return L.Trainer(accelerator="gpu", devices=devices, strategy=strategy, logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
-        # return L.Trainer(accelerator="gpu", devices=2, num_nodes=1, strategy="ddp", logger=logger, max_epochs=max_epochs)
-    
+    @method    
     def metrics(self) -> list[tuple[str,Metric]]:
         rank_accuracy = RankAccuracyTorchMetric(
             root=self.classification_tree, 
@@ -236,19 +210,7 @@ class Gambit(TorchApp2):
         #     for i, rank in enumerate(RANKS)
         # ]
     
-    def lightning_module(self) -> L.LightningModule:
-        # TODO CLI
-        max_learning_rate = 1e-4
-        #############
-
-        return GeneralLightningModule(
-            model=self.model(),
-            loss_function=self.loss_function(),
-            max_learning_rate=max_learning_rate,
-            input_count=2,
-            metrics=self.metrics(),
-        )
-    
+    @method    
     def data(self) -> Iterable|L.LightningDataModule:
         # TODO CLI
         max_items = 0        
@@ -264,32 +226,3 @@ class Gambit(TorchApp2):
             max_items=max_items,
         )
     
-    def validation_dataloader(self) -> Iterable|None:
-        return None
-        
-    def fit(self):
-        data = self.data()
-        data.setup()
-
-        lightning_module = self.lightning_module()
-        trainer = self.trainer()
-        validation_dataloader = self.validation_dataloader()
-
-        # Dummy data to set the number of weights in the model
-        dummy_batch = next(iter(data.train_dataloader()))
-        dummy_x = dummy_batch[:lightning_module.input_count]
-        with torch.no_grad():
-            lightning_module.model(*dummy_x)
-
-        trainer.fit( lightning_module, data, validation_dataloader )
-
-
-def main():
-    app = GambitLightningApp()
-    app.setup()
-    
-    app.fit()
-
-
-if __name__ == "__main__":
-    main()

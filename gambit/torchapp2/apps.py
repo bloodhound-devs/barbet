@@ -23,7 +23,7 @@ class TorchApp2(CLIApp):
     def loss_function(self):
         raise NotImplementedError(f"Please ensure that the 'loss_function' method is implemented in {self.__class__.__name__}.")
     
-    @method
+    @method()
     def data(self) -> Iterable|L.LightningDataModule:
         raise NotImplementedError(f"Please ensure that the 'data' method is implemented in {self.__class__.__name__}.")
     
@@ -77,7 +77,7 @@ class TorchApp2(CLIApp):
     @command
     def input_count(self) -> int:
         return 1
-    
+        
     @method("model", "loss_function")
     def lightning_module(
         self,

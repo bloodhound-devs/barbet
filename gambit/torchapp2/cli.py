@@ -30,17 +30,6 @@ def method(*args, command:bool=False):
     
     def decorator(func):
         return Method(func, args, command)
-        def wrapper(*args, **kwargs):
-            func_args = {k: v for k, v in kwargs.items() if k in signature(func).parameters}
-            return func(*args, **func_args)
-
-        wrapper._torchapp_command = command
-        wrapper._torchapp_method = True
-        wrapper._torchapp_methods_to_call = methods_to_call
-        wrapper._torchapp_signature_ready = False
-        wrapper.__signature__ = signature(func)
-
-        return wrapper
 
     return decorator
 
@@ -90,23 +79,26 @@ class CLIApp:
 
     def modify_signature(self, method_to_modify:Method, **kwargs) -> None:
         # Check if the method is already had its signature modified
-        if method_to_modify.signature_ready:
+        if not isinstance(method_to_modify, Method) or method_to_modify.signature_ready:
             return
 
+        all_methods = [method_to_modify]
+        for method_to_call_name in method_to_modify.methods_to_call:
+            method_to_call = getattr(self, method_to_call_name)
 
-        # all_methods = [method_to_modify]
-        # for method_to_call_name in methods_to_call:
-        #     # make sure method is has its signature modified before getting parameters
-        #     method_to_call = self.modify_signature(method_to_call_name)
-        #     all_methods.append(method_to_call)
-        
+            # make sure method is has its signature modified before getting parameters
+            self.modify_signature(method_to_call)
+            all_methods.append(method_to_call)
+
         # Get all arguments from all methods
-        # params = collect_arguments(*all_methods)
-        # new_params = [
-        #     Parameter(name, param.kind, default=param.default, annotation=param.annotation)
-        #     for name, param in params.items()
-        # ]
+        params = collect_arguments(*all_methods)
+        new_params = [
+            Parameter(name, param.kind, default=param.default, annotation=param.annotation)
+            for name, param in params.items()
+            if name not in ["self", "kwargs"]
+        ]
+        if new_params:        
+            method_to_modify.func.__signature__ = signature(method_to_modify.func).replace(parameters=new_params)
         
-        # method_to_modify.__signature__ = signature(method_to_modify).replace(parameters=new_params)
         # Set the method as ready
         method_to_modify.signature_ready = True
