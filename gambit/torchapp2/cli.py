@@ -8,7 +8,8 @@ from dataclasses import dataclass
 class Method():
     func: Callable
     methods_to_call: list[str]
-    command: bool = False    
+    main: bool = False    
+    tool: bool = False    
     signature_ready: bool = False
 
     @property
@@ -23,19 +24,27 @@ class Method():
     def __signature__(self):
         return signature(self.func)
 
+    @property
+    def __doc__(self):
+        return self.func.__doc__
 
-def method(*args, command:bool=False):
+
+def method(*args, main:bool=False, tool:bool=False):
     if len(args) == 1 and callable(args[0]):
-        return Method(args[0], [], command)
+        return Method(args[0], [], main=main, tool=tool)
     
     def decorator(func):
-        return Method(func, args, command)
+        return Method(func, args, main=main, tool=tool)
 
     return decorator
 
 
-def command(*methods_to_call):
-    return method(*methods_to_call, command=True)
+def tool(*methods_to_call):
+    return method(*methods_to_call, tool=True)
+
+
+def main(*methods_to_call):
+    return method(*methods_to_call, main=True, tool=True)
 
 
 def collect_arguments(*funcs):
@@ -50,15 +59,24 @@ def collect_arguments(*funcs):
 
 class CLIApp:
     def __init__(self):
-        self.app = typer.Typer()
+        self.main_app = typer.Typer()
+        self.tools_app = typer.Typer()
         self.register_methods()
 
     @classmethod
     def main(cls):
-        cls().app()
+        cls().main_app()
 
-    def add_command(self, func):
-        self.app.command()(func)
+    @classmethod
+    def tools(cls):
+        cls().tools_app()
+
+    def add_to_main(self, func):
+        self.main_app.command()(func)
+        return func
+
+    def add_to_tools(self, func):
+        self.tools_app.command()(func)
         return func
 
     def register_methods(self):
@@ -69,13 +87,14 @@ class CLIApp:
                 continue
 
             # Add to the CLI if method is decorated as a command
-            if attr.command:
-                self.add_command(attr)
+            if attr.main:
+                self.add_to_main(attr)
+            if attr.tool:
+                self.add_to_tools(attr)
 
             # Modify the signature of the method if necessary
             if not attr.signature_ready:
                 self.modify_signature(attr)
-
 
     def modify_signature(self, method_to_modify:Method, **kwargs) -> None:
         # Check if the method is already had its signature modified

@@ -65,6 +65,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 gambit = "gambit.apps_lightning:Gambit.main"
+gambit-tools = "gambit.apps_lightning:Gambit.tools"
 gambit-preprocess-esm = "gambit.embeddings.esm:app"
 gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
 gambit-preprocess-alphafold2 = "gambit.embeddings.alphafold2:app"

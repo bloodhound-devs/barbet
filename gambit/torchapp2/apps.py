@@ -8,7 +8,7 @@ from torchmetrics import Metric
 
 from .modules import GeneralLightningModule
 from .callbacks import TimeLoggingCallback, LogOptimizerCallback
-from .cli import CLIApp, method, command
+from .cli import CLIApp, method, main, tool
 
 class TorchApp2(CLIApp):
     @method
@@ -74,7 +74,7 @@ class TorchApp2(CLIApp):
     def metrics(self) -> list[tuple[str,Metric]]:
         return []
     
-    @command
+    @method
     def input_count(self) -> int:
         return 1
         
@@ -97,11 +97,12 @@ class TorchApp2(CLIApp):
             metrics=metrics,
         )
     
-    @command("setup", "data", "lightning_module", "trainer")
+    @tool("setup", "data", "lightning_module", "trainer")
     def train(
         self,
         **kwargs,
     ):
+        """Train the model."""
         self.setup(**kwargs)
         data = self.data(**kwargs)
         data.setup()
@@ -117,5 +118,10 @@ class TorchApp2(CLIApp):
             lightning_module.model(*dummy_x)
 
         trainer.fit( lightning_module, data, validation_dataloader )
+
+    @main
+    def predict(self, **kwargs):
+        """ Make predictions with the model. """
+        raise NotImplementedError(f"Please ensure that the 'predict' method is implemented in {self.__class__.__name__}.")
 
 

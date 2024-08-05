@@ -18,7 +18,7 @@ import os
 
 from lightning.pytorch.loggers import CSVLogger
 
-from .torchapp2.cli import method, command
+from .torchapp2.cli import method, tool
 from .torchapp2.apps import TorchApp2
 from .modelsx import GambitModel
 
@@ -122,18 +122,18 @@ class GambitDataModule(L.LightningDataModule):
 
 class Gambit(TorchApp2):
     @method
-    def setup(self) -> None:
-        # TODO CLI
-        # seqbank = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d-standardized.sb"
-        # seqtree = "/data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-d.st"
-
-        # esm_layers = 30
-        
-        # seqbank = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.sb"
-        memmap = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.np"
-        memmap_index = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.txt"
-        seqtree = f"/data/projects/punim2199/rob/release220/{DOMAIN}/esm{esm_layers}/esm{esm_layers}.st"
-        #############
+    def setup(
+        self,
+        memmap:str=None,
+        memmap_index:str=None,
+        seqtree:str=None,
+    ) -> None:
+        if not seqtree:
+            raise ValueError("seqtree is required")
+        if not memmap:
+            raise ValueError("memmap is required")
+        if not memmap_index:
+            raise ValueError("memmap_index is required")        
 
         # assert seqbank is not None
         # print(f"Loading seqbank {seqbank}")
@@ -172,14 +172,13 @@ class Gambit(TorchApp2):
         self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
 
     @method
-    def model(self) -> nn.Module:
-        # TODO CLI
-        features:int=1024
-        intermediate_layers:int=2
-        growth_factor:float=2.0
-        family_embedding_size:int=128
-        #############
-
+    def model(
+        self,
+        features:int=1024,
+        intermediate_layers:int=2,
+        growth_factor:float=2.0,
+        family_embedding_size:int=128,
+    ) -> nn.Module:
         return GambitModel(
             classification_tree=self.classification_tree,
             features=features,
@@ -189,7 +188,7 @@ class Gambit(TorchApp2):
             gene_family_count=len(self.gene_id_dict),
         )
     
-    @command
+    @tool
     def input_count(self) -> int:
         return 2
             
@@ -211,12 +210,10 @@ class Gambit(TorchApp2):
         # ]
     
     @method    
-    def data(self) -> Iterable|L.LightningDataModule:
-        # TODO CLI
-        max_items = 0        
-        # max_items=1000
-        #############
-
+    def data(
+        self,
+        max_items:int=0,
+    ) -> Iterable|L.LightningDataModule:
         return GambitDataModule(
             # seqbank=self.seqbank,
             array=self.array,
