@@ -8,30 +8,37 @@ from torchmetrics import Metric
 
 from .modules import GeneralLightningModule
 from .callbacks import TimeLoggingCallback, LogOptimizerCallback
-from .cli import CLIApp
+from .cli import CLIApp, method, command
 
 class TorchApp2(CLIApp):
+    @method
     def setup(self) -> None:
         pass
 
+    @method
     def model(self) -> nn.Module:
         raise NotImplementedError(f"Please ensure that the 'model' method is implemented in {self.__class__.__name__}.")
     
+    @method
     def loss_function(self):
         raise NotImplementedError(f"Please ensure that the 'loss_function' method is implemented in {self.__class__.__name__}.")
     
+    @method
     def data(self) -> Iterable|L.LightningDataModule:
         raise NotImplementedError(f"Please ensure that the 'data' method is implemented in {self.__class__.__name__}.")
     
+    @method
     def validation_dataloader(self) -> Iterable|None:
         return None
 
+    @method
     def callbacks(self):
         return [
             TimeLoggingCallback(),
             LogOptimizerCallback(),
         ]
     
+    @method
     def trainer(
         self,
         max_epochs:int=20,
@@ -63,28 +70,45 @@ class TorchApp2(CLIApp):
 
         return L.Trainer(accelerator="gpu", devices=devices, strategy=strategy, logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
     
+    @method
     def metrics(self) -> list[tuple[str,Metric]]:
         return []
     
+    @command
+    def input_count(self) -> int:
+        return 1
+    
+    @method("model", "loss_function")
     def lightning_module(
         self,
         max_learning_rate:float = 1e-4,
+        **kwargs,
     ) -> L.LightningModule:
-        return GeneralLightningModule(
-            model=self.model(),
-            loss_function=self.loss_function(),
-            max_learning_rate=max_learning_rate,
-            input_count=2,
-            metrics=self.metrics(),
-        )
-            
-    def fit(self):
-        data = self.data()
-        data.setup()
+        model = self.model(**kwargs)
+        loss_function = self.loss_function(**kwargs)
+        metrics = self.metrics(**kwargs)
+        input_count = self.input_count(**kwargs)
 
-        lightning_module = self.lightning_module()
-        trainer = self.trainer()
-        validation_dataloader = self.validation_dataloader()
+        return GeneralLightningModule(
+            model=model,
+            loss_function=loss_function,
+            max_learning_rate=max_learning_rate,
+            input_count=input_count,
+            metrics=metrics,
+        )
+    
+    @command("setup", "data", "lightning_module", "trainer")
+    def train(
+        self,
+        **kwargs,
+    ):
+        self.setup(**kwargs)
+        data = self.data(**kwargs)
+        data.setup()
+        validation_dataloader = self.validation_dataloader(**kwargs)
+
+        lightning_module = self.lightning_module(**kwargs)
+        trainer = self.trainer(**kwargs)
 
         # Dummy data to set the number of weights in the model
         dummy_batch = next(iter(data.train_dataloader()))
