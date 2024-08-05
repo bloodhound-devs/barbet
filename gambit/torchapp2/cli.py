@@ -11,6 +11,7 @@ class Method():
     main: bool = False    
     tool: bool = False    
     signature_ready: bool = False
+    obj = None
 
     @property
     def __name__(self):
@@ -18,7 +19,7 @@ class Method():
 
     def __call__(self, *args, **kwargs):
         func_args = {k: v for k, v in kwargs.items() if k in signature(self.func).parameters}
-        return self.func(*args, **func_args)
+        return self.func(self.obj, *args, **func_args)
 
     @property
     def __signature__(self):
@@ -100,6 +101,8 @@ class CLIApp:
         # Check if the method is already had its signature modified
         if not isinstance(method_to_modify, Method) or method_to_modify.signature_ready:
             return
+
+        method_to_modify.obj = self
 
         all_methods = [method_to_modify]
         for method_to_call_name in method_to_modify.methods_to_call:
