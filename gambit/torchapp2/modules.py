@@ -3,6 +3,8 @@ from functools import cached_property
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torchmetrics import Metric
+import lightning as L
+
 
 from .metrics import AvgSmoothLoss
 
