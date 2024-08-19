@@ -19,7 +19,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
-# torchapp = ">=0.3.10"
+torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
 hierarchicalsoftmax = "^1.1.0"
 # hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "main"}
 bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}

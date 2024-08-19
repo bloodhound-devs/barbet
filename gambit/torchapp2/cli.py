@@ -53,6 +53,9 @@ def collect_arguments(*funcs):
     params = {}
     for func in funcs:
         for name, param in signature(func).parameters.items():
+            # if param.default != Parameter.empty:
+            #     # only include args with defaults
+            #     continue
             if name != "self":  # Exclude 'self' parameter
                 params[name] = param
     return params
@@ -120,7 +123,10 @@ class CLIApp:
             if name not in ["self", "kwargs"]
         ]
         if new_params:        
-            method_to_modify.func.__signature__ = signature(method_to_modify.func).replace(parameters=new_params)
+            try:
+                method_to_modify.func.__signature__ = signature(method_to_modify.func).replace(parameters=new_params)
+            except Exception:
+                print(f"ERROR in {method_to_modify}")
         
         # Set the method as ready
         method_to_modify.signature_ready = True

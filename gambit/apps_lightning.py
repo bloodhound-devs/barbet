@@ -4,23 +4,41 @@ import numpy as np
 from pathlib import Path
 from torch import nn
 import lightning as L
-from corgi.seqtree import SeqTree
+from corgi.seqtree import SeqTree, SeqDetail
 from seqbank import SeqBank
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
+from rich.console import Console
 from torch.utils.data import Dataset
+from Bio import SeqIO
 from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
 from torchmetrics import Metric
+import pandas as pd
 import os
+from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from lightning.pytorch.loggers import CSVLogger
 
-from .torchapp2.cli import method, tool
-from .torchapp2.apps import TorchApp2
+# import torchapp as ta
+from torchapp import Param, method, tool, TorchApp
 from .modelsx import GambitModel
+from .gtdbtk import read_tophits, read_tigrfam, read_pfam
+from .embedding import get_key
+
+
+
+console = Console()
+
+def read_memmap(path, count, dtype:str="float16") -> np.memmap:
+    file_size = os.path.getsize(path)
+    dtype_size = np.dtype(dtype).itemsize
+    num_elements = file_size // dtype_size
+    embedding_size = num_elements // count
+    shape = (count, embedding_size)
+    return np.memmap(path, dtype=dtype, mode='r', shape=shape)
 
 
 def gene_id_from_accession(accession:str):
@@ -33,24 +51,57 @@ DOMAIN = "bac120"
 # DOMAIN = "ar53"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GambitDataset(Dataset):
     accessions: list[str]
-    seqtree: SeqTree
-    # seqbank: SeqBank
     array:np.memmap|np.ndarray
-    accession_to_array_index:dict[str,int]
     gene_id_dict: dict[str, int]
+    accession_to_array_index:dict[str,int]|None=None
 
     def __len__(self):
         return len(self.accessions)
 
     def __getitem__(self, idx):
         accession = self.accessions[idx]
-        array_index = self.accession_to_array_index[accession]
-        embedding = torch.tensor(self.array[array_index,:], dtype=torch.float16)
+        array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
+        embedding = torch.as_tensor(np.array(self.array[array_index,:], copy=False), dtype=torch.float16)
+        # embedding = torch.tensor(self.array[array_index,:], dtype=torch.float16)
         gene_id = gene_id_from_accession(accession)
-        return embedding, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
+        return embedding, self.gene_id_dict[gene_id]
+
+
+# @dataclass(kw_only=True)
+# class GambitTrainingDataset(GambitDataset):
+#     seqtree: SeqTree
+
+#     def __getitem__(self, idx):
+#         result = super()[idx]
+#         accession = self.accessions[idx]
+#         return *result, self.seqtree[accession].node_id
+
+
+@dataclass(kw_only=True)
+class GambitTrainingDataset(Dataset):
+    accessions: list[str]
+    seqtree: SeqTree
+    array:np.memmap|np.ndarray
+    gene_id_dict: dict[str, int]
+    accession_to_array_index:dict[str,int]|None=None
+
+    def __post_init__(self):
+        print('GambitTrainingDataset', hex(self.array.ctypes.data))
+
+    def __len__(self):
+        return len(self.accessions)
+
+    def __getitem__(self, idx):
+        accession = self.accessions[idx]
+        array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
+        embedding = torch.zeros( (320,), dtype=torch.float16) # hack
+        # embedding = torch.as_tensor(np.array(self.array[array_index,:], copy=False), dtype=torch.float16)
+        gene_id = gene_id_from_accession(accession)
+        return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
+        # return embedding, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
 
 
 @dataclass
@@ -104,8 +155,8 @@ class GambitDataModule(L.LightningDataModule):
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
 
-    def create_dataset(self, accessions:list[str]) -> GambitDataset:
-        return GambitDataset(
+    def create_dataset(self, accessions:list[str]) -> GambitTrainingDataset:
+        return GambitTrainingDataset(
             accessions=accessions, 
             seqtree=self.seqtree, 
             array=self.array,
@@ -114,19 +165,23 @@ class GambitDataModule(L.LightningDataModule):
         )
     
     def train_dataloader(self):
+        print('train dataloader', self.num_workers)
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
     def val_dataloader(self):
+        print('val_dataloader', self.num_workers)
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
-class Gambit(TorchApp2):
+class Gambit(TorchApp):
     @method
     def setup(
         self,
         memmap:str=None,
         memmap_index:str=None,
         seqtree:str=None,
+        in_memory:bool=False,
+        prune:str="",
     ) -> None:
         if not seqtree:
             raise ValueError("seqtree is required")
@@ -134,6 +189,30 @@ class Gambit(TorchApp2):
             raise ValueError("memmap is required")
         if not memmap_index:
             raise ValueError("memmap_index is required")        
+
+        print(f"Loading seqtree {seqtree}")
+        self.seqtree = SeqTree.load(seqtree)
+
+        # prune classification tree if requested
+        if prune:
+            assert prune in RANKS[:-1]
+            prune_rank_index = RANKS.index(prune) + 1
+            for key, node_detail in self.seqtree.items():
+                node = self.seqtree.node(key)
+                ancestors = node.ancestors
+                if len(ancestors) > prune_rank_index:
+                    new_node = node.ancestors[prune_rank_index]
+                    self.seqtree[key] = SeqDetail(new_node, node_detail.partition)
+            
+            # remove children of genus nodes
+            for node in self.seqtree.classification_tree.pre_order_iter():
+                self.readonly = False
+                if len(node.ancestors) == prune_rank_index:
+                    node.children = []
+
+            self.seqtree.set_indexes()
+            RANKS = RANKS[:-1]# hack
+
 
         # assert seqbank is not None
         # print(f"Loading seqbank {seqbank}")
@@ -145,20 +224,14 @@ class Gambit(TorchApp2):
             for i, accession in enumerate(f):
                 self.accession_to_array_index[accession.strip()] = i
         count = len(self.accession_to_array_index)
-        file_size = os.path.getsize(memmap)
-        dtype_size = np.dtype(dtype).itemsize
-        num_elements = file_size // dtype_size
-        embedding_size = num_elements // count
-        shape = (count, embedding_size)
-        self.array = np.memmap(memmap, dtype=dtype, mode='r', shape=shape)
+        self.array = read_memmap(memmap, count)
 
         # If there's enough memory, then read into RAM
-        memory_info = psutil.virtual_memory()
-        if memory_info.available > file_size * 2:
+        if in_memory:
             self.array = np.array(self.array)
 
-        print(f"Loading seqtree {seqtree}")
-        self.seqtree = SeqTree.load(seqtree)
+
+
 
         self.classification_tree = self.seqtree.classification_tree
         assert self.classification_tree is not None
@@ -194,10 +267,14 @@ class Gambit(TorchApp2):
             
     @method
     def loss_function(self):
+        def dummy_loss(prediction, target):
+            return prediction.mean() * 0.0
+        return dummy_loss # hack
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
     @method    
     def metrics(self) -> list[tuple[str,Metric]]:
+        return [] # hack
         rank_accuracy = RankAccuracyTorchMetric(
             root=self.classification_tree, 
             ranks={1+i:rank for i, rank in enumerate(RANKS)},
@@ -213,6 +290,7 @@ class Gambit(TorchApp2):
     def data(
         self,
         max_items:int=0,
+        num_workers:int=0,
     ) -> Iterable|L.LightningDataModule:
         return GambitDataModule(
             # seqbank=self.seqbank,
@@ -221,5 +299,189 @@ class Gambit(TorchApp2):
             seqtree=self.seqtree,
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
+            num_workers=num_workers,
         )
     
+    @method
+    def prediction_dataloader(
+        self,
+        module,
+        gtdbtk_output:Path=None,
+        embeddings:Path=None,
+        fasta:Path=None,
+        tophits:Path=None,
+        tigrfam:Path=None,
+        pfam:Path=None,
+        batch_size:int = 64,
+        num_workers: int = 0,
+    ) -> Iterable:
+        # Get Embedding model from dataloaders
+        embedding = module.embedding        
+        assert embedding is not None
+
+        self.classification_tree = module.classification_tree
+        assert self.classification_tree is not None
+
+        # If gtdbtk output directory is given, then fetch the top hits from tigrfam
+        def get_subfile(directory:Path, pattern:str) -> Path|None:
+            return next(iter(directory.glob(pattern)), None)
+
+        if gtdbtk_output is not None and gtdbtk_output.exists() and gtdbtk_output.is_dir():
+            if not tophits:
+                tophits = get_subfile(gtdbtk_output, '*_tigrfam_tophit.tsv')
+            if not tigrfam:
+                tophits = get_subfile(gtdbtk_output, '*_tigrfam.tsv')
+            if not pfam:
+                pfam = get_subfile(gtdbtk_output, '*_pfam.tsv')
+            if not fasta:
+                fasta = get_subfile(gtdbtk_output, '*_protein.faa')
+
+        # Create dictionary from gene id to family id from the tophits or tigrfam or pfam
+        if tophits:
+            gene_family_dict = read_tophits(tophits)        
+        elif tigrfam and tigrfam.exists():
+            gene_family_dict = read_tigrfam(tigrfam)
+        elif pfam:
+            gene_family_dict = read_pfam(pfam)
+
+        # Find genes where we need to create the embeddings
+        accessions = list({f"{gene_id}/{family_id}" for gene_id, family_id in gene_family_dict.items()})
+        genes_to_do = [accession.split("/")[0] for accession in accessions]
+        count = len(accessions)
+
+        dtype = "float16"
+        if Path(embeddings).exists():
+            array = read_memmap(embeddings, count, dtype=dtype)
+        else:
+            # Generate embeddings if necessary
+            array = None
+            print(f"Generating embeddings for {len(accessions)} protein sequences")
+            assert fasta is not None
+            fasta = Path(fasta)
+            assert fasta.exists()
+            for record in SeqIO.parse(fasta, "fasta"):
+                if record.id in genes_to_do:
+                    family_id = gene_family_dict[record.id]
+                    print(record.id, family_id)
+                    vector = embedding(record.seq)
+                    if vector is not None and not torch.isnan(vector).any():                        
+                        # Initialise array if necessary
+                        if array is None:
+                            size = len(vector)
+                            shape = (count,size)
+                            array = np.memmap(embeddings, dtype=dtype, mode='w+', shape=shape)
+
+                        # save vector to array
+                        index = genes_to_do.index(record.id)
+                        array[index] = vector.cpu().detach().clone().numpy()
+
+        dataset = GambitDataset(
+            accessions=accessions, 
+            array=self.array,
+            gene_id_dict=self.gene_id_dict,
+        )
+
+        self.items = accessions
+
+        return DataLoader(dataset, batch_size=batch_size, num_workers=self.num_workers, shuffle=False)
+
+    @method
+    def output_results(
+        self, 
+        results, 
+        output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
+        output_gene_csv: Path = Param(default=None, help="A path to output the results for individual genes as a CSV."),
+        output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
+        image: Path = Param(default=None, help="A path to output the result as an image."),
+        image_threshold:float = 0.005,
+        prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
+        seqtree:Path = None,
+        output_correct:Path=None,
+        **kwargs,
+    ):
+        assert self.classification_tree # This should be saved from the learner
+
+        # Sum the scores which is equivalent of multiplying the probabilities assuming that they are independent
+        results = results[0].sum(axis=0, keepdims=True)
+
+        classification_probabilities = node_probabilities(results, root=self.classification_tree)
+        category_names = [self.node_to_str(node) for node in self.classification_tree.node_list if not node.is_root]
+
+        results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
+        
+        classification_probabilities = torch.as_tensor(results_df[category_names].to_numpy()) 
+
+        # get greedy predictions which can use the raw activation or the softmax probabilities
+        predictions = greedy_predictions(
+            classification_probabilities, 
+            root=self.classification_tree, 
+            threshold=prediction_threshold,
+        )
+
+        results_df['greedy_prediction'] = [
+            self.node_to_str(node)
+            for node in predictions
+        ]
+
+        def get_prediction_probability(row):
+            prediction = row["greedy_prediction"]
+            if prediction in row:
+                return row[prediction]
+            return 1.0
+        
+        results_df['probability'] = results_df.apply(get_prediction_probability, axis=1)
+
+        # Reorder columns
+        results_df = results_df[["greedy_prediction", "probability" ] + category_names]
+
+        # Output images
+        if image:
+            console.print(f"Writing inference probability renders to: {image}")
+            image = Path(image)
+            image_paths = [image]
+            render_probabilities(
+                root=self.classification_tree, 
+                filepaths=image_paths,
+                probabilities=classification_probabilities,
+                predictions=predictions,
+                threshold=image_threshold,
+            )
+
+        if seqtree is not None:
+            seqtree = SeqTree.load(seqtree)
+            prefix = get_key(self.accession, gene="")
+            for key in seqtree.keys():
+                if key.startswith(prefix):
+                    break
+            correct_node = seqtree.node(key)
+            correct_ancestors = correct_node.ancestors + (correct_node,)
+            prediction_node = predictions[0]
+            prediction_ancestors = prediction_node.ancestors + (prediction_node,)
+            for i, rank in enumerate(RANKS):
+                prediction_rank = str(prediction_ancestors[i+1]).strip()
+                correct_rank = str(correct_ancestors[i+1]).strip()
+                rank_is_correct = (prediction_rank == correct_rank)
+                if rank_is_correct:
+                    console.print(f"[green]{rank} correctly predicted as {prediction_rank}")
+                else:
+                    console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
+                results_df[f"correct_{rank}"] = rank_is_correct
+
+        if not (image or output_csv or output_tips_csv):
+            print("No output files requested.")
+
+        if output_tips_csv:
+            output_tips_csv = Path(output_tips_csv)
+            output_tips_csv.parent.mkdir(exist_ok=True, parents=True)
+            non_tips = [self.node_to_str(node) for node in self.classification_tree.node_list if not node.is_leaf]
+            tips_df = results_df.drop(columns=non_tips)
+            tips_df.to_csv(output_tips_csv, index=False)
+
+        if output_csv:
+            output_csv = Path(output_csv)
+            output_csv.parent.mkdir(exist_ok=True, parents=True)
+            console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
+            results_df.to_csv(output_csv, index=False)
+
+        return results_df
+

@@ -1,10 +1,13 @@
+from pathlib import Path
 import os
 from collections.abc import Iterable
 import torch
 from torch import nn
+from typing import Type
 import lightning as L
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torchmetrics import Metric
+from pytorch_lightning.profilers import Profiler, PyTorchProfiler
 
 from .modules import GeneralLightningModule
 from .callbacks import TimeLoggingCallback, LogOptimizerCallback
@@ -32,11 +35,25 @@ class TorchApp2(CLIApp):
         return None
 
     @method
+    def prediction_dataloader(self, module) -> Iterable:
+        raise NotImplementedError(f"Please ensure that the 'data' method is implemented in {self.__class__.__name__}.")
+
+    @method
     def callbacks(self):
         return [
             TimeLoggingCallback(),
             LogOptimizerCallback(),
         ]
+    
+    @method
+    def profiler(
+        self,
+        profiler_path:Path,
+        **kwargs,
+    ) -> Profiler:
+        return PyTorchProfiler(
+            filename=str(profiler_path)
+        )
     
     @method
     def trainer(
@@ -46,6 +63,8 @@ class TorchApp2(CLIApp):
         wandb:bool=False,
         wandb_project:str="",
         wandb_entity:str="",
+        max_gpus:int=0,
+        **kwargs,
     ) -> L.Trainer:
         loggers = [
             CSVLogger("logs", name=run_name)
@@ -61,6 +80,9 @@ class TorchApp2(CLIApp):
         
         # If GPUs are available, use all of them; otherwise, use CPUs
         gpus = torch.cuda.device_count()
+        if max_gpus:
+            gpus = min(max_gpus, gpus)
+        
         if gpus > 1:
             devices = gpus
             strategy = 'ddp'  # Distributed Data Parallel
@@ -68,7 +90,15 @@ class TorchApp2(CLIApp):
             devices = "auto"  # Will use CPU if no GPU is available
             strategy = "auto"
 
-        return L.Trainer(accelerator="gpu", devices=devices, strategy=strategy, logger=loggers, max_epochs=max_epochs, callbacks=self.callbacks())
+        return L.Trainer(
+            accelerator="gpu", 
+            devices=devices, 
+            strategy=strategy, 
+            logger=loggers, 
+            max_epochs=max_epochs, 
+            callbacks=self.callbacks(),
+            profiler=self.profiler(**kwargs),
+        )
     
     @method
     def metrics(self) -> list[tuple[str,Metric]]:
@@ -77,6 +107,10 @@ class TorchApp2(CLIApp):
     @method
     def input_count(self) -> int:
         return 1
+    
+    @method
+    def module_class(self) -> Type[GeneralLightningModule]:
+        return GeneralLightningModule
         
     @method("model", "loss_function")
     def lightning_module(
@@ -89,7 +123,9 @@ class TorchApp2(CLIApp):
         metrics = self.metrics(**kwargs)
         input_count = self.input_count(**kwargs)
 
-        return GeneralLightningModule(
+        module_class = self.module_class(**kwargs)
+
+        return module_class(
             model=model,
             loss_function=loss_function,
             max_learning_rate=max_learning_rate,
@@ -119,9 +155,35 @@ class TorchApp2(CLIApp):
 
         trainer.fit( lightning_module, data, validation_dataloader )
 
-    @main
+    @method
+    def checkpoint(self, checkpoint:Path, **kwargs) -> Path:
+        """ Returns a path to a checkpoint to use for prediction. """
+        return checkpoint
+    
+    @method
+    def load_checkpoint(self, **kwargs) -> L.LightningModule:
+        module_class = self.module_class(**kwargs)
+        return module_class.load_from_checkpoint(self.checkpoint(**kwargs))
+    
+    @method
+    def prediction_trainer(self, module) -> L.Trainer:
+        # TODO multigpu
+        return L.Trainer()
+    
+    @method
+    def output_results(self, results, **kwargs):
+        raise NotImplementedError(f"Please ensure that the 'output_results' method is implemented in {self.__class__.__name__}.")
+
+    @main("load_checkpoint", "prediction_trainer", "prediction_dataloader", "output_results")
     def predict(self, **kwargs):
         """ Make predictions with the model. """
-        raise NotImplementedError(f"Please ensure that the 'predict' method is implemented in {self.__class__.__name__}.")
+        module = self.load_checkpoint(**kwargs)
+        trainer = self.prediction_trainer(module, **kwargs)
+        prediction_dataloader = self.prediction_dataloader(module, **kwargs)
+
+        results = trainer.predict(module, dataloaders=prediction_dataloader)
+
+        return self.output_results(results, **kwargs)
+        
 
 
