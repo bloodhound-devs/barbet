@@ -1,13 +1,14 @@
 import torch
 from pathlib import Path
-import random
 from seqbank import SeqBank
 from corgi.seqtree import SeqTree
-from corgi.dataloaders import CorgiDataloaders
+from fastai.data.core import TfmdDL, DataLoaders
 from fastcore.transform import Transform
-from fastai.data.core import TfmdDL
 from dataclasses import dataclass
 from rich.progress import track
+from hierarchicalsoftmax import SoftmaxNode
+
+from .embedding import Embedding
 
 
 def get_preprocessed_path(base_dir:Path, name:str) -> Path:
@@ -22,15 +23,29 @@ class Item():
     index:int
 
 
+def gene_id_from_accession(accession:str):
+    return accession.split("/")[-1]
+
 @dataclass
-class AccessionToInputOutput(Transform):
-    seqtree:SeqTree
+class AccessionToInput(Transform):
     seqbank:SeqBank
+    gene_id_dict:dict
 
     def encodes(self, accession:str):
         data = self.seqbank[accession]
         array = torch.frombuffer(data, dtype=torch.float32)
-        return array, self.seqtree[accession].node_id
+        del data
+        gene_id = gene_id_from_accession(accession)
+        return array, self.gene_id_dict[gene_id]
+
+
+@dataclass
+class AccessionToInputOutput(AccessionToInput):
+    seqtree:SeqTree
+
+    def encodes(self, accession:str):
+        inputs = super().encodes(accession)
+        return *inputs, self.seqtree[accession].node_id
 
 
 @dataclass
@@ -56,39 +71,84 @@ class FileToInput(Transform):
         return self.data()[i],
 
 
+class GambitDataloaders(DataLoaders):
+    def __init__(
+        self, 
+        *loaders, # `DataLoader` objects to wrap
+        path:str='.', # Path to store export objects
+        device=None, # Device to put `DataLoaders`
+        classification_tree:SoftmaxNode=None,
+        embedding:Embedding=None,
+        gene_id_dict:dict[str:int]=None
+    ):
+        super().__init__(*loaders, path=path, device=device)
+        self.classification_tree = classification_tree
+        self.embedding = embedding
+        self.gene_id_dict = gene_id_dict
+
+    def new_empty(self):
+        loaders = [dl.new([]) for dl in self.loaders]
+        return type(self)(*loaders, path=self.path, device=self.device, classification_tree=self.classification_tree, embedding=self.embedding, gene_id_dict=self.gene_id_dict)
+
+
 def create_dataloaders(
     seqtree:SeqTree, 
     seqbank:SeqBank, 
     batch_size:int, 
     validation_partition:int,
+    embedding:Embedding,
     max_items:int=0,
-) -> CorgiDataloaders:   
+) -> GambitDataloaders:   
     training = []
     validation = []
+    family_ids = set()
+
     for accession, details in seqtree.items():
         partition = details.partition
         dataset = validation if partition == validation_partition else training
         dataset.append( accession )
 
+        gene_id = accession.split("/")[-1]
+        family_ids.add(gene_id)
+
         if max_items and len(training) >= max_items and len(validation) > 0:
             break
+
+    gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
 
     training_dl = TfmdDL(
         dataset=training,
         batch_size=batch_size, 
         shuffle=True,
-        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree),
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, gene_id_dict=gene_id_dict),
+        n_imp=2,
     )   
 
     validation_dl = TfmdDL(
         dataset=validation,
         batch_size=batch_size, 
         shuffle=False,
-        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree),
-    )   
+        after_item=AccessionToInputOutput(seqbank=seqbank, seqtree=seqtree, gene_id_dict=gene_id_dict),
+        n_imp=2,
+    )
 
-    dls = CorgiDataloaders(training_dl, validation_dl, classification_tree=seqtree.classification_tree)
+    dls = GambitDataloaders(
+        training_dl, 
+        validation_dl, 
+        classification_tree=seqtree.classification_tree, 
+        gene_id_dict=gene_id_dict, 
+        embedding=embedding,
+    )
     return dls
+
+
+def seqbank_dataloader(seqbank:SeqBank, items:list[str], batch_size:int) -> TfmdDL:
+    return TfmdDL(
+        dataset=items,
+        batch_size=batch_size, 
+        shuffle=False,
+        after_item=AccessionToInput(seqbank=seqbank),
+    )
 
 
 def species_dataloader(embeddings:Path, batch_size:int, cache:bool=True) -> TfmdDL:

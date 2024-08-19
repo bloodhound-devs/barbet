@@ -19,14 +19,15 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
-torchapp = ">=0.3.10"
+torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
 hierarchicalsoftmax = "^1.1.0"
 # hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "main"}
 bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}
 
 # alphafold = "^2.0.0" # PyPi version of alphafold is stuck at 2.0.0 and it won't work (throws error about missing alphafold.model and alphafold.model.tf
-alphafold = {git = "https://github.com/google-deepmind/alphafold.git", rev = "main"}
+# alphafold = {git = "https://github.com/google-deepmind/alphafold.git", rev = "main"}
 
+torch = "=2.2.0"
 transformers = "^4.40.2"
 sentencepiece = "^0.2.0"
 dm-haiku = "^0.0.12"
@@ -35,6 +36,7 @@ tqdm = "^4.66.4"
 jaxlib = "^0.4.28"
 wandb = "^0.17.0"
 biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module has been deprecated in 1.83 and it was not there before 1.78. Needed for alphafold >=2.3.2
+lightning = "^2.3.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
@@ -63,6 +65,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 gambit = "gambit.apps:Gambit.main"
+gambit-tools = "gambit.apps:Gambit.tools"
 gambit-preprocess-esm = "gambit.embeddings.esm:app"
 gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
 gambit-preprocess-alphafold2 = "gambit.embeddings.alphafold2:app"
