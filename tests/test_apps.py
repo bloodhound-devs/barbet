@@ -1,6 +1,6 @@
 from torchapp.testing import TorchAppTestCase
-from gambit.apps import Gambit
+from bloodhound._old_apps_fastai import Bloodhound
 
 
-class TestGambit(TorchAppTestCase):
-    app_class = Gambit
+class TestBloodhound(TorchAppTestCase):
+    app_class = Bloodhound

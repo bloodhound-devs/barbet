@@ -27,11 +27,11 @@ import alphafold as a2
 from absl import logging
 logging.set_verbosity(logging.INFO)
 
-from gambit.embedding import Embedding
+from bloodhound.embedding import Embedding
 app = typer.Typer()
 
 params_dir = '/data/scratch/datasets/alphafold/v2.3.2' # This directory should contain a 'params' directory
-out_dir = './gambit/embeddings/af2_out'
+out_dir = './bloodhound/embeddings/af2_out'
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 available_models = ["model_1","model_2","model_3","model_4","model_5"]
@@ -120,7 +120,7 @@ class AlphaFold2Embedding(Embedding):
 
         self.query_sequence = protein_seq
 
-        self.jobname = 'gambit_AF2' #@param {type:"string"}
+        self.jobname = 'bloodhound_AF2' #@param {type:"string"}
         self.jobname = "".join(self.jobname.split())
         self.jobname = re.sub(r'\W+', '', self.jobname)
         self.jobname = add_hash(self.jobname, self.query_sequence)

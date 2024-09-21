@@ -14,7 +14,7 @@ from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions
 import pandas as pd
 
 
-from .modelsx import GambitModel
+from .modelsx import BloodhoundModel
 from .dataloaders import create_dataloaders, seqbank_dataloader
 from .embedding import get_key
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
@@ -24,7 +24,7 @@ RANKS = ["phylum", "class", "order", "family", "genus", "species"]
 
 console = Console()
 
-class Gambit(ta.TorchApp):
+class Bloodhound(ta.TorchApp):
     """
     Geometric Analysis of MicroBIal Taxonomies
     """
@@ -38,7 +38,7 @@ class Gambit(ta.TorchApp):
         esm_layers:int=6,
     ) -> DataLoaders:
         """
-        Creates a FastAI DataLoaders object which Gambit uses in training and prediction.
+        Creates a FastAI DataLoaders object which Bloodhound uses in training and prediction.
 
         Args:
             inputs (Path): The input file.
@@ -79,12 +79,12 @@ class Gambit(ta.TorchApp):
         family_embedding_size:int=64,
     ) -> nn.Module:
         """
-        Creates a deep learning model for the Gambit to use.
+        Creates a deep learning model for the Bloodhound to use.
 
         Returns:
             nn.Module: The created model.
         """
-        return GambitModel(
+        return BloodhoundModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,

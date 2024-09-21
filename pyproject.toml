@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "Gambit"
+name = "Bloodhound"
 version = "0.1.0"
 description = "Geometric Analysis of MicroBIal Taxonomies"
 authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
 license = "Apache-2.0"
 readme = "README.rst"
-repository = "https://github.com/GAMBIT-devs/gambit/"
-documentation = "https://GAMBIT-devs.github.io/gambit"
-homepage = "https://github.com/GAMBIT-devs/gambit/"
+repository = "https://github.com/bloodhound-devs/bloodhound/"
+documentation = "https://bloodhound-devs.github.io/bloodhound"
+homepage = "https://github.com/bloodhound-devs/bloodhound/"
 keywords = ["fastai", "torchapp", "pytorch", "deep learning", "command-line interface"]
 # For classifiers see https://pypi.org/classifiers/
 classifiers = [
@@ -20,9 +20,9 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
 torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
-hierarchicalsoftmax = "^1.1.0"
-# hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "main"}
-bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "hierarchical"}
+# hierarchicalsoftmax = "^1.1.0"
+hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
+bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "lightning"}
 
 # alphafold = "^2.0.0" # PyPi version of alphafold is stuck at 2.0.0 and it won't work (throws error about missing alphafold.model and alphafold.model.tf
 # alphafold = {git = "https://github.com/google-deepmind/alphafold.git", rev = "main"}
@@ -64,10 +64,10 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-gambit = "gambit.apps:Gambit.main"
-gambit-tools = "gambit.apps:Gambit.tools"
-gambit-preprocess-esm = "gambit.embeddings.esm:app"
-gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
-gambit-preprocess-alphafold2 = "gambit.embeddings.alphafold2:app"
+bloodhound = "bloodhound.apps:Bloodhound.main"
+bloodhound-tools = "bloodhound.apps:Bloodhound.tools"
+bloodhound-preprocess-esm = "bloodhound.embeddings.esm:app"
+bloodhound-preprocess-prostt5 = "bloodhound.embeddings.prost_t5:app"
+bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
 
-gambit-preprocess-alphafold2-test = "gambit.embeddings.alphafold2:test"
+bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"

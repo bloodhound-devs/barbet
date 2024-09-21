@@ -4,10 +4,11 @@ import numpy as np
 from pathlib import Path
 from torch import nn
 import lightning as L
+from torchmetrics import Metric
+from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 from corgi.seqtree import SeqTree, SeqDetail
 from seqbank import SeqBank
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
-from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from rich.console import Console
@@ -15,16 +16,13 @@ from torch.utils.data import Dataset
 from Bio import SeqIO
 from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
-from torchmetrics import Metric
+
 import pandas as pd
 import os
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
-from lightning.pytorch.loggers import CSVLogger
-
-# import torchapp as ta
 from torchapp import Param, method, tool, TorchApp
-from .modelsx import GambitModel
+from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
 
@@ -52,7 +50,7 @@ DOMAIN = "bac120"
 
 
 @dataclass(kw_only=True)
-class GambitDataset(Dataset):
+class BloodhoundDataset(Dataset):
     accessions: list[str]
     array:np.memmap|np.ndarray
     gene_id_dict: dict[str, int]
@@ -71,7 +69,7 @@ class GambitDataset(Dataset):
 
 
 # @dataclass(kw_only=True)
-# class GambitTrainingDataset(GambitDataset):
+# class BloodhoundTrainingDataset(BloodhoundDataset):
 #     seqtree: SeqTree
 
 #     def __getitem__(self, idx):
@@ -81,7 +79,7 @@ class GambitDataset(Dataset):
 
 
 @dataclass(kw_only=True)
-class GambitTrainingDataset(Dataset):
+class BloodhoundTrainingDataset(Dataset):
     accessions: list[str]
     seqtree: SeqTree
     array:np.memmap|np.ndarray
@@ -89,7 +87,7 @@ class GambitTrainingDataset(Dataset):
     accession_to_array_index:dict[str,int]|None=None
 
     def __post_init__(self):
-        print('GambitTrainingDataset', hex(self.array.ctypes.data))
+        print('BloodhoundTrainingDataset', hex(self.array.ctypes.data))
 
     def __len__(self):
         return len(self.accessions)
@@ -97,15 +95,62 @@ class GambitTrainingDataset(Dataset):
     def __getitem__(self, idx):
         accession = self.accessions[idx]
         array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        embedding = torch.zeros( (320,), dtype=torch.float16) # hack
-        # embedding = torch.as_tensor(np.array(self.array[array_index,:], copy=False), dtype=torch.float16)
+        # x = self.array[array_index,:]
+        # x = np.array(self.array[array_index,:], copy=False)
+
+
+        # x = self.array[array_index,:]
+        # # xx = np.array(x, copy=True)
+        # xxx = x.tolist()
+        # embedding = torch.from_numpy(xxx)
+        # # x = np.array(self.array[array_index,:], copy=False)
+        # # embedding = torch.tensor(x, dtype=torch.float16)
+        # del x
+        # del xxx
+
+        with torch.no_grad():
+            data = np.array(self.array[array_index, :], copy=False)
+            embedding = torch.tensor(data, dtype=torch.float16)
+            del data
+
+        # with torch.no_grad():
+        #     data_numpy0 = self.array[array_index,:]
+        #     data_numpy1 = np.array(data_numpy0, copy=False)
+        #     data_tensor = torch.as_tensor(data_numpy1, dtype=torch.float16)
+        #     embedding = data_tensor.detach().clone()
+        #     del data_tensor
+        #     del data_numpy1
+        #     del data_numpy0
+
+        # embedding = torch.zeros( (320,), dtype=torch.float16) # hack
+        # embedding = torch.zeros( (320,), dtype=torch.float32) # hack
+
+        # data = np.array(self.array[array_index,:], copy=False)
+        # tensor = torch.as_tensor(data, dtype=torch.float16)
+        # t = torch.from_numpy(data)
+        # with torch.no_grad():
+        #     array_index = 0
+        #     x = self.array[array_index,:]
+        #     data = np.array(x, copy=False)
+        #     x = data.mean()
+        #     # for i in range(320):
+        #     #     embedding[i] = float(data[i].item())
+        #     del data
+        #     del x
+        # del tensor
+        # # embedding = torch.tensor(x, dtype=torch.float16)
+
         gene_id = gene_id_from_accession(accession)
-        return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
-        # return embedding, self.gene_id_dict[gene_id], self.seqtree[accession].node_id
+        seq_detail = self.seqtree[accession]
+        node_id = int(seq_detail.node_id)
+        del seq_detail
+        
+        # return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
+        return embedding, self.gene_id_dict[gene_id], node_id
 
 
 @dataclass
-class GambitDataModule(L.LightningDataModule):
+class BloodhoundDataModule(L.LightningDataModule):
     seqtree: SeqTree
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
@@ -136,7 +181,7 @@ class GambitDataModule(L.LightningDataModule):
         self.max_items = max_items
         self.batch_size = batch_size
         self.validation_partition = validation_partition
-        self.num_workers = num_workers or os.cpu_count()
+        self.num_workers = num_workers or min(os.cpu_count(), 8)
 
     def setup(self, stage=None):
         # make assignments here (val/train/test split)
@@ -155,8 +200,8 @@ class GambitDataModule(L.LightningDataModule):
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
 
-    def create_dataset(self, accessions:list[str]) -> GambitTrainingDataset:
-        return GambitTrainingDataset(
+    def create_dataset(self, accessions:list[str]) -> BloodhoundTrainingDataset:
+        return BloodhoundTrainingDataset(
             accessions=accessions, 
             seqtree=self.seqtree, 
             array=self.array,
@@ -173,7 +218,7 @@ class GambitDataModule(L.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
-class Gambit(TorchApp):
+class Bloodhound(TorchApp):
     @method
     def setup(
         self,
@@ -194,24 +239,24 @@ class Gambit(TorchApp):
         self.seqtree = SeqTree.load(seqtree)
 
         # prune classification tree if requested
-        if prune:
-            assert prune in RANKS[:-1]
-            prune_rank_index = RANKS.index(prune) + 1
-            for key, node_detail in self.seqtree.items():
-                node = self.seqtree.node(key)
-                ancestors = node.ancestors
-                if len(ancestors) > prune_rank_index:
-                    new_node = node.ancestors[prune_rank_index]
-                    self.seqtree[key] = SeqDetail(new_node, node_detail.partition)
+        # if prune:
+        #     assert prune in RANKS[:-1]
+        #     prune_rank_index = RANKS.index(prune) + 1
+        #     for key, node_detail in self.seqtree.items():
+        #         node = self.seqtree.node(key)
+        #         ancestors = node.ancestors
+        #         if len(ancestors) > prune_rank_index:
+        #             new_node = node.ancestors[prune_rank_index]
+        #             self.seqtree[key] = SeqDetail(new_node, node_detail.partition)
             
-            # remove children of genus nodes
-            for node in self.seqtree.classification_tree.pre_order_iter():
-                self.readonly = False
-                if len(node.ancestors) == prune_rank_index:
-                    node.children = []
+        #     # remove children of genus nodes
+        #     for node in self.seqtree.classification_tree.pre_order_iter():
+        #         self.readonly = False
+        #         if len(node.ancestors) == prune_rank_index:
+        #             node.children = []
 
-            self.seqtree.set_indexes()
-            RANKS = RANKS[:-1]# hack
+        #     self.seqtree.set_indexes()
+        #     RANKS = RANKS[:-1]# hack
 
 
         # assert seqbank is not None
@@ -252,7 +297,7 @@ class Gambit(TorchApp):
         growth_factor:float=2.0,
         family_embedding_size:int=128,
     ) -> nn.Module:
-        return GambitModel(
+        return BloodhoundModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
@@ -267,14 +312,15 @@ class Gambit(TorchApp):
             
     @method
     def loss_function(self):
-        def dummy_loss(prediction, target):
-            return prediction.mean() * 0.0
-        return dummy_loss # hack
+        # def dummy_loss(prediction, target):
+        #     return prediction[0,0] * 0.0
+        #     # return prediction.mean() * 0.0
+        # return dummy_loss # hack
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
     @method    
     def metrics(self) -> list[tuple[str,Metric]]:
-        return [] # hack
+        # return [] # hack
         rank_accuracy = RankAccuracyTorchMetric(
             root=self.classification_tree, 
             ranks={1+i:rank for i, rank in enumerate(RANKS)},
@@ -292,7 +338,7 @@ class Gambit(TorchApp):
         max_items:int=0,
         num_workers:int=0,
     ) -> Iterable|L.LightningDataModule:
-        return GambitDataModule(
+        return BloodhoundDataModule(
             # seqbank=self.seqbank,
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
@@ -375,7 +421,7 @@ class Gambit(TorchApp):
                         index = genes_to_do.index(record.id)
                         array[index] = vector.cpu().detach().clone().numpy()
 
-        dataset = GambitDataset(
+        dataset = BloodhoundDataset(
             accessions=accessions, 
             array=self.array,
             gene_id_dict=self.gene_id_dict,
@@ -485,3 +531,37 @@ class Gambit(TorchApp):
 
         return results_df
 
+    @method
+    def extra_callbacks_off(self, **kwargs):
+        from lightning.pytorch.callbacks import Callback
+        import tracemalloc
+        class MemoryLeakCallback(Callback):
+            def on_train_start(self, trainer, pl_module):
+                # Start tracing memory allocations at the beginning of the training
+                tracemalloc.start()
+                print("tracemalloc started")
+
+            def on_train_batch_start(self, trainer, pl_module, *args, **kwargs):
+                # Take a snapshot before the batch starts
+                self.snapshot_before = tracemalloc.take_snapshot()
+
+            def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
+                # Take a snapshot after the batch ends
+                snapshot_after = tracemalloc.take_snapshot()
+                
+                # Compare the snapshots
+                stats = snapshot_after.compare_to(self.snapshot_before, 'lineno')
+                
+                # Log the top memory-consuming lines
+                print(f"[Batch {trainer.global_step}] Memory differences:")
+                for stat in stats[:20]:
+                    print(stat)
+
+                # Optionally, monitor peak memory usage
+                current, peak = tracemalloc.get_traced_memory()
+                print(f"Current memory usage: {current / 1024**2:.2f} MB; Peak: {peak / 1024**2:.2f} MB")
+                
+                # Clear traces if needed to prevent tracemalloc from consuming too much memory itself
+                tracemalloc.clear_traces()
+
+        return [MemoryLeakCallback()]

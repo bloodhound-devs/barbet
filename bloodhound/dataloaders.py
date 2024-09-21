@@ -71,7 +71,7 @@ class FileToInput(Transform):
         return self.data()[i],
 
 
-class GambitDataloaders(DataLoaders):
+class BloodhoundDataloaders(DataLoaders):
     def __init__(
         self, 
         *loaders, # `DataLoader` objects to wrap
@@ -98,7 +98,7 @@ def create_dataloaders(
     validation_partition:int,
     embedding:Embedding,
     max_items:int=0,
-) -> GambitDataloaders:   
+) -> BloodhoundDataloaders:   
     training = []
     validation = []
     family_ids = set()
@@ -132,7 +132,7 @@ def create_dataloaders(
         n_imp=2,
     )
 
-    dls = GambitDataloaders(
+    dls = BloodhoundDataloaders(
         training_dl, 
         validation_dl, 
         classification_tree=seqtree.classification_tree, 

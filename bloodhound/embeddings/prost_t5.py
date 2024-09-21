@@ -4,7 +4,7 @@ import torch
 
 from transformers import T5Tokenizer, T5EncoderModel
 
-from gambit.embedding import Embedding
+from bloodhound.embedding import Embedding
 app = typer.Typer()
 
 

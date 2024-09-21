@@ -18,14 +18,14 @@ sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
-project = "Gambit"
+project = "Bloodhound"
 copyright = "2022, Wytamma Wirth, Robert Turnbull, Mar Quiroga"
 author = "Wytamma Wirth, Robert Turnbull, Mar Quiroga"
 
 # The full version, including alpha/beta/rc tags
 release = "0.1.0"
 # import importlib.metadata
-# release = importlib.metadata.version('gambit')
+# release = importlib.metadata.version('bloodhound')
 
 
 # -- General configuration ---------------------------------------------------
