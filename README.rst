@@ -1,6 +1,4 @@
-================================================================
-Bloodhound
-================================================================
+.. image:: https://raw.githubusercontent.com/bloodhound-devs/bloodhound/main/docs/images/bloodhound-banner.jpg
 
 .. start-badges
 
@@ -25,8 +23,6 @@ Bloodhound
 
 .. start-quickstart
 
-Geometric Analysis of MicroBIal Taxonomies
-
 Installation
 ==================================
 
@@ -44,13 +40,13 @@ See the options for training a model with the command:
 
 .. code-block:: bash
 
-    bloodhound train --help
+    bloodhound-tools train --help
 
 See the options for making inferences with the command:
 
 .. code-block:: bash
 
-    bloodhound infer --help
+    bloodhound --help
 
 .. end-quickstart
 
