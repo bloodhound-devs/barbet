@@ -1,4 +1,4 @@
-.. image:: https://raw.githubusercontent.com/bloodhound-devs/bloodhound/main/docs/images/bloodhound-banner.jpg
+.. image:: https://github.com/bloodhound-devs/bloodhound/blob/main/docs/images/bloodhound-banner.jpg?raw=true
 
 .. start-badges
 
