@@ -6,7 +6,7 @@ from corgi.seqtree import SeqTree
 from rich.progress import track
 from Bio import SeqIO
 
-from gambit.embedding import get_key
+from bloodhound.embedding import get_key
 
 app = typer.Typer()
 

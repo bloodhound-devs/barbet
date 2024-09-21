@@ -28,10 +28,10 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
  
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-source /data/gpfs/projects/punim2199/mar/gambit/.venv/bin/activate
+source /data/gpfs/projects/punim2199/mar/bloodhound/.venv/bin/activate
 
-gambit-preprocess-prostt5  \
-    /data/gpfs/projects/punim2199/gambit_data/release220-partial/ar53_taxonomy_r220.tsv     \
-    /data/gpfs/projects/punim2199/gambit_data/release220-partial/ar53_marker_genes_all_r220.tar.gz     \
+bloodhound-preprocess-prostt5  \
+    /data/gpfs/projects/punim2199/bloodhound_data/release220-partial/ar53_taxonomy_r220.tsv     \
+    /data/gpfs/projects/punim2199/bloodhound_data/release220-partial/ar53_marker_genes_all_r220.tar.gz     \
     /data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-c.st     \
     /data/gpfs/projects/punim2199/preprocessed/ar53/prostt5/prostt5-c.sb     

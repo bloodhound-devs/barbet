@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 from typing_extensions import Annotated
 
-from gambit.embedding import Embedding
+from bloodhound.embedding import Embedding
 
 app = typer.Typer()
 

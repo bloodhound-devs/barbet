@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "Gambit"
+name = "Bloodhound"
 version = "0.1.0"
 description = "Geometric Analysis of MicroBIal Taxonomies"
 authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
 license = "Apache-2.0"
 readme = "README.rst"
-repository = "https://github.com/GAMBIT-devs/gambit/"
-documentation = "https://GAMBIT-devs.github.io/gambit"
-homepage = "https://github.com/GAMBIT-devs/gambit/"
+repository = "https://github.com/BLOODHOUND-devs/bloodhound/"
+documentation = "https://BLOODHOUND-devs.github.io/bloodhound"
+homepage = "https://github.com/BLOODHOUND-devs/bloodhound/"
 keywords = ["fastai", "torchapp", "pytorch", "deep learning", "command-line interface"]
 # For classifiers see https://pypi.org/classifiers/
 classifiers = [
@@ -64,10 +64,10 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-gambit = "gambit.apps:Gambit.main"
-gambit-tools = "gambit.apps:Gambit.tools"
-gambit-preprocess-esm = "gambit.embeddings.esm:app"
-gambit-preprocess-prostt5 = "gambit.embeddings.prost_t5:app"
-gambit-preprocess-alphafold2 = "gambit.embeddings.alphafold2:app"
+bloodhound = "bloodhound.apps:Bloodhound.main"
+bloodhound-tools = "bloodhound.apps:Bloodhound.tools"
+bloodhound-preprocess-esm = "bloodhound.embeddings.esm:app"
+bloodhound-preprocess-prostt5 = "bloodhound.embeddings.prost_t5:app"
+bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
 
-gambit-preprocess-alphafold2-test = "gambit.embeddings.alphafold2:test"
+bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"

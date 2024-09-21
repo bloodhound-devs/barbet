@@ -2,7 +2,7 @@
 API Reference
 =======================
 
-.. automodule:: gambit.apps
+.. automodule:: bloodhound.apps
     :members:
     :inherited-members:
 

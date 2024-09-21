@@ -22,7 +22,7 @@ import os
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from torchapp import Param, method, tool, TorchApp
-from .modelsx import GambitModel
+from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
 
@@ -50,7 +50,7 @@ DOMAIN = "bac120"
 
 
 @dataclass(kw_only=True)
-class GambitDataset(Dataset):
+class BloodhoundDataset(Dataset):
     accessions: list[str]
     array:np.memmap|np.ndarray
     gene_id_dict: dict[str, int]
@@ -69,7 +69,7 @@ class GambitDataset(Dataset):
 
 
 # @dataclass(kw_only=True)
-# class GambitTrainingDataset(GambitDataset):
+# class BloodhoundTrainingDataset(BloodhoundDataset):
 #     seqtree: SeqTree
 
 #     def __getitem__(self, idx):
@@ -79,7 +79,7 @@ class GambitDataset(Dataset):
 
 
 @dataclass(kw_only=True)
-class GambitTrainingDataset(Dataset):
+class BloodhoundTrainingDataset(Dataset):
     accessions: list[str]
     seqtree: SeqTree
     array:np.memmap|np.ndarray
@@ -87,7 +87,7 @@ class GambitTrainingDataset(Dataset):
     accession_to_array_index:dict[str,int]|None=None
 
     def __post_init__(self):
-        print('GambitTrainingDataset', hex(self.array.ctypes.data))
+        print('BloodhoundTrainingDataset', hex(self.array.ctypes.data))
 
     def __len__(self):
         return len(self.accessions)
@@ -150,7 +150,7 @@ class GambitTrainingDataset(Dataset):
 
 
 @dataclass
-class GambitDataModule(L.LightningDataModule):
+class BloodhoundDataModule(L.LightningDataModule):
     seqtree: SeqTree
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
@@ -200,8 +200,8 @@ class GambitDataModule(L.LightningDataModule):
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
 
-    def create_dataset(self, accessions:list[str]) -> GambitTrainingDataset:
-        return GambitTrainingDataset(
+    def create_dataset(self, accessions:list[str]) -> BloodhoundTrainingDataset:
+        return BloodhoundTrainingDataset(
             accessions=accessions, 
             seqtree=self.seqtree, 
             array=self.array,
@@ -218,7 +218,7 @@ class GambitDataModule(L.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
-class Gambit(TorchApp):
+class Bloodhound(TorchApp):
     @method
     def setup(
         self,
@@ -297,7 +297,7 @@ class Gambit(TorchApp):
         growth_factor:float=2.0,
         family_embedding_size:int=128,
     ) -> nn.Module:
-        return GambitModel(
+        return BloodhoundModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
@@ -338,7 +338,7 @@ class Gambit(TorchApp):
         max_items:int=0,
         num_workers:int=0,
     ) -> Iterable|L.LightningDataModule:
-        return GambitDataModule(
+        return BloodhoundDataModule(
             # seqbank=self.seqbank,
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
@@ -421,7 +421,7 @@ class Gambit(TorchApp):
                         index = genes_to_do.index(record.id)
                         array[index] = vector.cpu().detach().clone().numpy()
 
-        dataset = GambitDataset(
+        dataset = BloodhoundDataset(
             accessions=accessions, 
             array=self.array,
             gene_id_dict=self.gene_id_dict,

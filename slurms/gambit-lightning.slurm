@@ -1,7 +1,7 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=gambit-lightning
+#SBATCH --job-name=bloodhound-lightning
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -32,7 +32,7 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
  
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-source /home/rturnbull/wytamma/rob/gambit-lightning/.venv/bin/activate
+source /home/rturnbull/wytamma/rob/bloodhound-lightning/.venv/bin/activate
 
 
 DOMAIN=bac120
@@ -55,7 +55,7 @@ SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${
 #SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
 
 
-gambit-tools train  \
+bloodhound-tools train  \
         --memmap  $MEMMAP \
         --memmap-index  /data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --seqtree  $SEQTREE \
@@ -67,7 +67,7 @@ gambit-tools train  \
         --max-learning-rate $LR \
         --run-name  ${SEQTREE_NAME}-b16f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR} \
         --num-workers 4 \
-        --wandb-project   "Gambit" \
+        --wandb-project   "Bloodhound" \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 
 
