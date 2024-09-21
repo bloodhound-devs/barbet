@@ -5,9 +5,9 @@ description = "Geometric Analysis of MicroBIal Taxonomies"
 authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
 license = "Apache-2.0"
 readme = "README.rst"
-repository = "https://github.com/BLOODHOUND-devs/bloodhound/"
-documentation = "https://BLOODHOUND-devs.github.io/bloodhound"
-homepage = "https://github.com/BLOODHOUND-devs/bloodhound/"
+repository = "https://github.com/bloodhound-devs/bloodhound/"
+documentation = "https://bloodhound-devs.github.io/bloodhound"
+homepage = "https://github.com/bloodhound-devs/bloodhound/"
 keywords = ["fastai", "torchapp", "pytorch", "deep learning", "command-line interface"]
 # For classifiers see https://pypi.org/classifiers/
 classifiers = [
