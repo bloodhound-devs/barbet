@@ -66,8 +66,8 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 bloodhound = "bloodhound.apps:Bloodhound.main"
 bloodhound-tools = "bloodhound.apps:Bloodhound.tools"
-bloodhound-preprocess-esm = "bloodhound.embeddings.esm:app"
-bloodhound-preprocess-prostt5 = "bloodhound.embeddings.prost_t5:app"
+bloodhound-esm = "bloodhound.embeddings.esm:ESMEmbedding.main"
+bloodhound-prostt5 = "bloodhound.embeddings.prost_t5:ProstT5Embedding.main"
 bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
 
 bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"

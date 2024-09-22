@@ -1,17 +1,11 @@
-import typer
-from pathlib import Path
 import torch
-
 from transformers import T5Tokenizer, T5EncoderModel
 
 from bloodhound.embedding import Embedding
-app = typer.Typer()
 
 
 class ProstT5Embedding(Embedding):
-    def __init__(self):
-        super().__init__()
-
+    def setup(self):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.tokenizer = T5Tokenizer.from_pretrained('Rostlab/ProstT5', do_lower_case=False)
         self.model = T5EncoderModel.from_pretrained("Rostlab/ProstT5").to(self.device)
@@ -48,26 +42,3 @@ class ProstT5Embedding(Embedding):
 
         return vector        
 
-
-@app.command()
-def main(
-    taxonomy:Path,
-    marker_genes:Path,
-    output_seqtree:Path,
-    output_seqbank:Path,
-    partitions:int=5,
-    seed:int=42,
-):
-    model = ProstT5Embedding()
-    model.preprocess(
-        taxonomy=taxonomy,
-        marker_genes=marker_genes,
-        output_seqtree=output_seqtree,
-        output_seqbank=output_seqbank,
-        partitions=partitions,
-        seed=seed,
-    )
-
-
-if __name__ == "__main__":
-    app()

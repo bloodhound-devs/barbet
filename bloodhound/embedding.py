@@ -2,6 +2,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 from Bio import SeqIO
 import random
+import numpy as np
 from rich.progress import track
 from seqbank import SeqBank
 from hierarchicalsoftmax import SoftmaxNode
@@ -9,6 +10,9 @@ from corgi.seqtree import SeqTree
 import tarfile
 import torch
 from io import StringIO
+from torchapp.cli import CLIApp, main, method
+import typer
+
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
@@ -30,8 +34,7 @@ def get_node(lineage:str, lineage_to_node:dict[str,SoftmaxNode]) -> SoftmaxNode:
     return node
 
 
-class Embedding(ABC):
-
+class Embedding(CLIApp, ABC):
     @abstractmethod
     def embed(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
@@ -40,6 +43,10 @@ class Embedding(ABC):
     def __call__(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
         return self.embed(seq)
+    
+    @method
+    def setup(self, **kwargs):
+        pass
 
     def build_seqtree(self, taxonomy:Path) -> tuple[SeqTree,dict[str,SoftmaxNode]]:
         # Create root of tree
@@ -63,86 +70,99 @@ class Embedding(ABC):
         seqtree = SeqTree(classification_tree=root)
         return seqtree, accession_to_node
 
-    def preprocess(
+    @main("setup")
+    def build_gene_array(
         self,
-        taxonomy:Path,
-        marker_genes:Path,
-        output_seqtree:Path,
-        output_seqbank:Path,
-        partitions:int=5,
-        seed:int=42,
-        file_stride:int=0,
-        file_offset:int=0,
-        generate:bool=True,
-        filter:list[str]|None=None,
+        marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
+        family_index:int=typer.Option(default=..., help="The index for the gene family to use. E.g. if there are 120 gene families then this should be a number from 0 to 119."),
+        output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
+        flush_every:int=typer.Option(default=5_000, help="An interval to flush the memmap array as it is generated."),
+        **kwargs,
     ):
-        seqtree, accession_to_node = self.build_seqtree(taxonomy)
+        self.setup(**kwargs)
 
-        seqbank = SeqBank(output_seqbank, write=True) 
-        starting_accessions = set(seqbank.get_accessions())
-        random.seed(seed)
+        assert marker_genes is not None
+        assert family_index is not None
+        assert output_dir is not None
 
-        partitions_dict = {}
+        dtype = 'float16'
 
+        memmap_array = None
+        output_dir.mkdir(parents=True, exist_ok=True)
+        memmap_wip_path = output_dir / f"{family_index}-wip.npy"
+        error = output_dir / f"{family_index}-errors.txt"
+        accessions_wip = output_dir / f"{family_index}-accessions-wip.txt"
+
+        accessions = []
+        
         print(f"Loading {marker_genes} file.")
-        with tarfile.open(marker_genes, "r:gz") as tar:
+        with tarfile.open(marker_genes, "r:gz") as tar, open(error, "w") as error_file, open(accessions_wip, "w") as accessions_wip_file:
             members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
             
-            # Check if we should subset the member files with a stride and offset
-            # This is useful for processing 
-            if file_stride > 0:
-                assert file_offset < file_stride
-                members = members[file_offset::file_stride]
+            member = members[family_index]
+            print(f"Processing file {family_index} in {marker_genes}")
 
-            print(f"Processing {len(members)} files in {marker_genes}")
 
-            for member in members:
-                f = tar.extractfile(member)
-                marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
+            f = tar.extractfile(member)
+            marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
 
-                if filter and marker_id not in filter:
+            fasta_io = StringIO(f.read().decode('ascii'))
+
+            total = sum(1 for _ in SeqIO.parse(fasta_io, "fasta"))
+            fasta_io.seek(0)
+            print(marker_id, total)
+    
+            for record in track(SeqIO.parse(fasta_io, "fasta"), total=total):
+                species_accession = record.id
+                                
+                key = get_key(species_accession, marker_id)
+
+                seq = str(record.seq).replace("-","").replace("*","")
+                try:
+                    vector = self(seq)
+                except Exception as err:
+                    print(f"{key} ({len(seq)}): {err}", file=error_file)
                     continue
 
-                fasta_io = StringIO(f.read().decode('ascii'))
+                if vector is None:
+                    print(f"{key} ({len(seq)}): Embedding is None", file=error_file)
+                    continue
 
-                total = sum(1 for _ in SeqIO.parse(fasta_io, "fasta"))
-                fasta_io.seek(0)
-                print(marker_id, total)
-        
-                for record in track(SeqIO.parse(fasta_io, "fasta"), total=total):
-                    species_accession = record.id
-                    
-                    node = accession_to_node[species_accession]
-                    partition_key = f"{node}|{marker_id}"
-                    if partition_key not in partitions_dict:
-                        partitions_dict[partition_key] = random.randint(0,partitions-1)
-                    
-                    partition = partitions_dict[partition_key]
-                    key = get_key(species_accession, marker_id)
-                    if not key in starting_accessions:
-                        if not generate:
-                            continue
+                if torch.isnan(vector).any():
+                    print(f"{key} ({len(seq)}): Embedding contains NaN", file=error_file)
+                    continue
 
-                        seq = str(record.seq).replace("-","").replace("*","")
-                        try:
-                            vector = self(seq)
-                        except Exception as err:
-                            print(f"ERROR for {key} ({len(seq)}): {err}")
-                            continue
+                if memmap_array is None:
+                    size = len(vector)
+                    shape = (total,size)
+                    memmap_array = np.memmap(memmap_wip_path, dtype=dtype, mode='w+', shape=shape)
 
-                        if vector is not None and not torch.isnan(vector).any():
-                            seqbank.add(
-                                seq=vector.cpu().detach().clone().numpy().tobytes(),
-                                accession=key,
-                            )
-                            del vector
-                        else:
-                            print(f"Invalid result for {key} ({len(seq)}): {err}")
-                            continue
-                    
-                    seqtree.add(key, node, partition)
+                index = len(accessions)
+                memmap_array[index,:] = vector.half().numpy()
+                if index % flush_every == 0:
+                    memmap_array.flush()
+                
+                accessions.append(key)
+                print(key, file=accessions_wip_file)
                                             
-        if file_stride == 0:
-            seqtree.save(output_seqtree)        
-        else:
-            print("Not outputting seqtree because it would be incomplete because of the file stride. Run again without a file stride.")
+        memmap_array.flush()
+
+        accessions_path = output_dir / f"{family_index}.txt"
+        with open(accessions_path, "w") as f:
+            for accession in accessions:
+                print(accession, file=f)
+        
+        # Save final memmap array now that we now the final size
+        final_memmap_path = output_dir / f"{family_index}.npy"
+        shape = (len(accessions),size)
+        final_memmap_array = np.memmap(final_memmap_path, dtype=dtype, mode='w+', shape=shape)
+        final_memmap_array[:] = memmap_array[:]
+        final_memmap_array.flush()
+
+        # Clean up
+        memmap_array._mmap.close()
+        memmap_array._mmap = None
+        memmap_array = None
+        memmap_wip_path.unlink()
+        accessions_wip.unlink()
+

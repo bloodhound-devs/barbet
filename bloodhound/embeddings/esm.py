@@ -1,33 +1,48 @@
+from enum import Enum
 import typer
 from pathlib import Path
 import torch
-from typing_extensions import Annotated
-
+from torchapp.cli import method
 from bloodhound.embedding import Embedding
 
-app = typer.Typer()
-
-ESM2_LAYERS_TO_MODEL_NAME = {
-    48 : "esm2_t48_15B_UR50D",
-    36 : "esm2_t36_3B_UR50D",
-    33 : "esm2_t33_650M_UR50D",
-    30 : "esm2_t30_150M_UR50D",
-    12 : "esm2_t12_35M_UR50D",
-    6  : "esm2_t6_8M_UR50D",
-}
 
 
-def get_esm2_model_alphabet(layers:int) -> tuple["ESM2", "Alphabet"]:
-    assert layers in ESM2_LAYERS_TO_MODEL_NAME
-    model_name = ESM2_LAYERS_TO_MODEL_NAME[layers]
-    return torch.hub.load("facebookresearch/esm:main", model_name)
+class ESMLayers(Enum):
+    T6 = "6"
+    T12 = "12"
+    T30 = "30"
+    T33 = "33"
+    T36 = "36"
+    T48 = "48"
+
+    def model_name(self) -> str:
+        match self:
+            case ESMLayers.T48:
+                return "esm2_t48_15B_UR50D"
+            case ESMLayers.T36:
+                return "esm2_t36_3B_UR50D"
+            case ESMLayers.T33:
+                return "esm2_t33_650M_UR50D"
+            case ESMLayers.T30:
+                return "esm2_t30_150M_UR50D"
+            case ESMLayers.T12:
+                return "esm2_t12_35M_UR50D"
+            case ESMLayers.T6:
+                return "esm2_t6_8M_UR50D"
+
+    def get_model_alphabet(self) -> tuple["ESM2", "Alphabet"]:
+        return torch.hub.load("facebookresearch/esm:main", self.model_name())
 
 
 class ESMEmbedding(Embedding):
-    def __init__(self, layers:int, hub_dir:Path|str|None=None):
-        super().__init__()
-
-        assert layers in ESM2_LAYERS_TO_MODEL_NAME.keys(), f"Please ensure the number of ESM layers is one of " + ", ".join(ESM2_LAYERS_TO_MODEL_NAME.keys())
+    @method
+    def setup(
+        self, 
+        layers:ESMLayers=typer.Option(..., help="The number of ESM layers to use."),
+        hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
+    ):
+        self.layers = layers
+        assert layers in ESMLayers, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
 
         self.hub_dir = hub_dir
         if hub_dir:
@@ -61,7 +76,7 @@ class ESMEmbedding(Embedding):
         self.alphabet = None
 
     def load(self):
-        self.model, self.alphabet = get_esm2_model_alphabet(self.layers)
+        self.model, self.alphabet = self.layers.get_model_alphabet()
         self.batch_converter = self.alphabet.get_batch_converter()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
@@ -94,45 +109,45 @@ class ESMEmbedding(Embedding):
         return vector        
 
 
-@app.command()
-def main(
-    taxonomy:Path,
-    marker_genes:Path,
-    output_seqtree:Path,
-    output_seqbank:Path,
-    layers:int,
-    partitions:int=5,
-    seed:int=42,
-    file_stride: Annotated[
-        int, 
-        typer.Option(help="A stride value for subsetting the marker gene files. Set this to the number of jobs to run in parallel.")
-    ]=0,
-    file_offset:Annotated[
-        int, 
-        typer.Option(help="An offset value for subsetting the marker gene files. Set this to the job index (0 <= file_offset < file_stride).")
-    ]=0,
-    hub_dir:Annotated[
-        Path, 
-        typer.Option(help="The torch hub directory where the ESM models will be saved.")
-    ]=None,
-    filter:list[str]=None,
-    generate:bool=True, # whether or not to generate the embeddings if they don't exist. only use if all embeddings already exists and you only want to create a seqtree
-):
-    model = ESMEmbedding(layers=layers, hub_dir=hub_dir)
-    model.preprocess(
-        taxonomy=taxonomy,
-        marker_genes=marker_genes,
-        output_seqtree=output_seqtree,
-        output_seqbank=output_seqbank,
-        partitions=partitions,
-        seed=seed,
-        file_stride=file_stride,
-        file_offset=file_offset,
-        filter=filter,
-        generate=generate,
-    )
+# @app.command()
+# def main(
+#     taxonomy:Path,
+#     marker_genes:Path,
+#     output_seqtree:Path,
+#     output_seqbank:Path,
+#     layers:int,
+#     partitions:int=5,
+#     seed:int=42,
+#     file_stride: Annotated[
+#         int, 
+#         typer.Option(help="A stride value for subsetting the marker gene files. Set this to the number of jobs to run in parallel.")
+#     ]=0,
+#     file_offset:Annotated[
+#         int, 
+#         typer.Option(help="An offset value for subsetting the marker gene files. Set this to the job index (0 <= file_offset < file_stride).")
+#     ]=0,
+#     hub_dir:Annotated[
+#         Path, 
+#         typer.Option(help="The torch hub directory where the ESM models will be saved.")
+#     ]=None,
+#     filter:list[str]=None,
+#     generate:bool=True, # whether or not to generate the embeddings if they don't exist. only use if all embeddings already exists and you only want to create a seqtree
+# ):
+#     model = ESMEmbedding(layers=layers, hub_dir=hub_dir)
+#     model.preprocess(
+#         taxonomy=taxonomy,
+#         marker_genes=marker_genes,
+#         output_seqtree=output_seqtree,
+#         output_seqbank=output_seqbank,
+#         partitions=partitions,
+#         seed=seed,
+#         file_stride=file_stride,
+#         file_offset=file_offset,
+#         filter=filter,
+#         generate=generate,
+#     )
 
 
-if __name__ == "__main__":
-    app()
+# if __name__ == "__main__":
+#     app()
 
