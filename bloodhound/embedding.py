@@ -12,7 +12,7 @@ import torch
 from io import StringIO
 from torchapp.cli import CLIApp, main, method
 import typer
-
+from .data import read_memmap
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
@@ -166,3 +166,118 @@ class Embedding(CLIApp, ABC):
         memmap_wip_path.unlink()
         accessions_wip.unlink()
 
+    @main("setup")
+    def preprocess(
+        self,
+        taxonomy:Path,
+        marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
+        family_index:int=typer.Option(default=..., help="The index for the gene family to use. E.g. if there are 120 gene families then this should be a number from 0 to 119."),
+        output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
+        flush_every:int=typer.Option(default=5_000, help="An interval to flush the memmap array as it is generated."),
+        partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
+        seed:int=typer.Option(default=42, help="The random seed.")
+    ):
+        seqtree, accession_to_node = self.build_seqtree(taxonomy)
+
+        dtype = 'float16'
+
+        random.seed(seed)
+
+        partitions_dict = {}
+
+        print(f"Loading {marker_genes} file.")
+        with tarfile.open(marker_genes, "r:gz") as tar:
+            members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
+            family_count = len(members)
+        print(f"{family_count} gene families found.")
+
+        # Read and collect accessions
+        keys = []
+        counts = []
+        for family_index in range(family_count):
+            keys_path = output_dir / f"{family_index}.txt"
+            with open(keys_path) as f:
+                family_index_keys = [line.strip() for line in f]
+                keys += family_index_keys
+                counts.append(len(family_index_keys))
+
+
+                for key in family_index_keys:
+                    species_accession, marker_id = key.split("|")
+                    node = accession_to_node[species_accession]
+                    seqtree.add(key, node, partition)
+
+        # Concatenate numpy memmap arrays
+        memmap_array = None
+        memmap_array_path = output_dir / "memmap.npy"
+        current_index = 0
+        for family_index, family_count in enumerate(counts):
+            my_memmap_path = output_dir / f"{family_index}.npy"
+            my_memmap = read_memmap(my_memmap_path, family_count)
+
+            if memmap_array is None:
+                size = my_memmap.shape[1]
+                shape = (total,size)
+                memmap_array = np.memmap(memmap_array_path, dtype=dtype, mode='w+', shape=shape)
+
+            memmap_array[current_index:current_index+family_count,:] = my_memmap[:,:]
+
+
+            # Check if we should subset the member files with a stride and offset
+            # This is useful for processing 
+            if file_stride > 0:
+                assert file_offset < file_stride
+                members = members[file_offset::file_stride]
+
+            print(f"Processing {len(members)} files in {marker_genes}")
+
+            for member in members:
+                f = tar.extractfile(member)
+                marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
+
+                if filter and marker_id not in filter:
+                    continue
+
+                fasta_io = StringIO(f.read().decode('ascii'))
+
+                total = sum(1 for _ in SeqIO.parse(fasta_io, "fasta"))
+                fasta_io.seek(0)
+                print(marker_id, total)
+        
+                for record in track(SeqIO.parse(fasta_io, "fasta"), total=total):
+                    species_accession = record.id
+                    
+                    node = accession_to_node[species_accession]
+                    partition_key = f"{node}|{marker_id}"
+                    if partition_key not in partitions_dict:
+                        partitions_dict[partition_key] = random.randint(0,partitions-1)
+                    
+                    partition = partitions_dict[partition_key]
+                    key = get_key(species_accession, marker_id)
+                    if not key in starting_accessions:
+                        if not generate:
+                            continue
+
+                        seq = str(record.seq).replace("-","").replace("*","")
+                        try:
+                            vector = self(seq)
+                        except Exception as err:
+                            print(f"ERROR for {key} ({len(seq)}): {err}")
+                            continue
+
+                        if vector is not None and not torch.isnan(vector).any():
+                            seqbank.add(
+                                seq=vector.cpu().detach().clone().numpy().tobytes(),
+                                accession=key,
+                            )
+                            del vector
+                        else:
+                            print(f"Invalid result for {key} ({len(seq)}): {err}")
+                            continue
+                    
+                    seqtree.add(key, node, partition)
+                                            
+        if file_stride == 0:
+            seqtree.save(output_seqtree)        
+        else:
+            print("Not outputting seqtree because it would be incomplete because of the file stride. Run again without a file stride.")
