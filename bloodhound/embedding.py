@@ -4,7 +4,6 @@ from Bio import SeqIO
 import random
 import numpy as np
 from rich.progress import track
-from seqbank import SeqBank
 from hierarchicalsoftmax import SoftmaxNode
 from corgi.seqtree import SeqTree
 import tarfile
@@ -12,7 +11,9 @@ import torch
 from io import StringIO
 from torchapp.cli import CLIApp, main, method
 import typer
+
 from .data import read_memmap, RANKS
+
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
@@ -168,22 +169,22 @@ class Embedding(CLIApp, ABC):
         memmap_wip_path.unlink()
         accessions_wip.unlink()
 
-    @main("setup")
+    @main
     def preprocess(
         self,
-        taxonomy:Path,
+        taxonomy:Path=typer.Option(default=..., help="The path to the TSV taxonomy file (e.g. bac120_taxonomy_r220.tsv)."),
         marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
-        family_index:int=typer.Option(default=..., help="The index for the gene family to use. E.g. if there are 120 gene families then this should be a number from 0 to 119."),
         output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
         seed:int=typer.Option(default=42, help="The random seed."),
-        partition_rank:str=typer.Option(default="species", help="The partition rank to use."),
+        validation_rank:str=typer.Option(default="species", help="The rank to hold out for cross-validation."),
     ):
         seqtree, accession_to_node = self.build_seqtree(taxonomy)
 
-        partition_rank = partition_rank.lower()
-        assert partition_rank in RANKS
-        partition_rank_index = RANKS.index(partition_rank)
+        # find the taxonomic rank to use for the validation partition
+        validation_rank = validation_rank.lower()
+        assert validation_rank in RANKS
+        validation_rank_index = RANKS.index(validation_rank)
 
         dtype = 'float16'
 
@@ -200,7 +201,7 @@ class Embedding(CLIApp, ABC):
         # Read and collect accessions
         keys = []
         counts = []
-        for family_index in range(family_count):
+        for family_index in track(range(family_count)):
             keys_path = output_dir / f"{family_index}.txt"
 
             # the partitions dict is reset for each family
@@ -216,7 +217,7 @@ class Embedding(CLIApp, ABC):
                     node = accession_to_node[species_accession]
 
                     # Assign validation partition at set rank
-                    partition_node = node.ancestors[partition_rank_index]
+                    partition_node = node.ancestors[validation_rank_index]
                     if partition_node not in partitions_dict:
                         partitions_dict[partition_node] = random.randint(0,partitions-1)
 

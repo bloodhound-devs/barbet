@@ -35,7 +35,7 @@ DOMAIN=bac120
 #DOMAIN=ar53
 LAYERS=12
 
-bloodhound-esm  \
+bloodhound-esm build-gene-array \
     --layers $LAYERS \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS} \
