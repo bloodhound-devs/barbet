@@ -47,7 +47,6 @@ class ESMEmbedding(Embedding):
         self.hub_dir = hub_dir
         if hub_dir:
             torch.hub.set_dir(str(hub_dir))
-        self.layers = layers
         self.model = None
         self.device = None
         self.batch_converter = None
@@ -83,6 +82,7 @@ class ESMEmbedding(Embedding):
 
     def embed(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
+        layers = int(self.layers.value)
 
         if not self.model:
             self.load()
@@ -93,8 +93,8 @@ class ESMEmbedding(Embedding):
 
         # Extract per-residue representations (on CPU)
         with torch.no_grad():
-            results = self.model(batch_tokens, repr_layers=[self.layers], return_contacts=True)
-        token_representations = results["representations"][self.layers]
+            results = self.model(batch_tokens, repr_layers=[layers], return_contacts=True)
+        token_representations = results["representations"][layers]
 
         # Generate per-sequence representations via averaging
         # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
@@ -103,8 +103,8 @@ class ESMEmbedding(Embedding):
             sequence_representations.append(token_representations[i, 1 : tokens_len - 1].mean(0))
 
         vector = sequence_representations[0]
-        if torch.isnan(vector).any():
-            return None
+        # if torch.isnan(vector).any():
+        #     return None
 
         return vector        
 
