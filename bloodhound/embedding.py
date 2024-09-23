@@ -16,8 +16,8 @@ from .data import read_memmap
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
-    assert len(accession) == len("RS_GCF_000006945.2")
-    key = f"{accession[3:6]}/{accession[7:10]}/{accession[10:13]}/{accession}/{gene}"
+    # assert len(accession) == len("RS_GCF_000006945.2")
+    key = f"{accession}/{gene}"
     return key
 
 
@@ -87,7 +87,7 @@ class Embedding(CLIApp, ABC):
 
         dtype = 'float16'
 
-        memmap_array = None
+        memmap_wip_array = None
         output_dir.mkdir(parents=True, exist_ok=True)
         memmap_wip_path = output_dir / f"{family_index}-wip.npy"
         error = output_dir / f"{family_index}-errors.txt"
@@ -113,6 +113,7 @@ class Embedding(CLIApp, ABC):
             print(marker_id, total)
     
             for record in track(SeqIO.parse(fasta_io, "fasta"), total=total):
+            # for record in SeqIO.parse(fasta_io, "fasta"):
                 species_accession = record.id
                                 
                 key = get_key(species_accession, marker_id)
@@ -132,20 +133,20 @@ class Embedding(CLIApp, ABC):
                     print(f"{key} ({len(seq)}): Embedding contains NaN", file=error_file)
                     continue
 
-                if memmap_array is None:
+                if memmap_wip_array is None:
                     size = len(vector)
                     shape = (total,size)
-                    memmap_array = np.memmap(memmap_wip_path, dtype=dtype, mode='w+', shape=shape)
+                    memmap_wip_array = np.memmap(memmap_wip_path, dtype=dtype, mode='w+', shape=shape)
 
                 index = len(accessions)
-                memmap_array[index,:] = vector.half().numpy()
+                memmap_wip_array[index,:] = vector.cpu().half().numpy()
                 if index % flush_every == 0:
-                    memmap_array.flush()
+                    memmap_wip_array.flush()
                 
                 accessions.append(key)
                 print(key, file=accessions_wip_file)
                                             
-        memmap_array.flush()
+        memmap_wip_array.flush()
 
         accessions_path = output_dir / f"{family_index}.txt"
         with open(accessions_path, "w") as f:
@@ -153,11 +154,12 @@ class Embedding(CLIApp, ABC):
                 print(accession, file=f)
         
         # Save final memmap array now that we now the final size
-        final_memmap_path = output_dir / f"{family_index}.npy"
+        memmap_path = output_dir / f"{family_index}.npy"
         shape = (len(accessions),size)
-        final_memmap_array = np.memmap(final_memmap_path, dtype=dtype, mode='w+', shape=shape)
-        final_memmap_array[:] = memmap_array[:]
-        final_memmap_array.flush()
+        print(f"Writing final memmap array of shape {shape}: {memmap_path}")
+        memmap_array = np.memmap(memmap_path, dtype=dtype, mode='w+', shape=shape)
+        memmap_array[:len(accessions),:] = memmap_wip_array[:len(accessions),:]
+        memmap_array.flush()
 
         # Clean up
         memmap_array._mmap.close()
