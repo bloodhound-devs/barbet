@@ -25,28 +25,11 @@ from torchapp import Param, method, tool, TorchApp
 from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
-
+from .data import read_memmap, RANKS, gene_id_from_accession
 
 
 console = Console()
 
-def read_memmap(path, count, dtype:str="float16") -> np.memmap:
-    file_size = os.path.getsize(path)
-    dtype_size = np.dtype(dtype).itemsize
-    num_elements = file_size // dtype_size
-    embedding_size = num_elements // count
-    shape = (count, embedding_size)
-    return np.memmap(path, dtype=dtype, mode='r', shape=shape)
-
-
-def gene_id_from_accession(accession:str):
-    return accession.split("/")[-1]
-
-RANKS = ["phylum", "class", "order", "family", "genus", "species"]
-
-esm_layers = 6
-DOMAIN = "bac120"
-# DOMAIN = "ar53"
 
 
 @dataclass(kw_only=True)
