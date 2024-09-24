@@ -30,7 +30,7 @@ source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
-DOMAIN=bac120
+DOMAIN=$DOMAIN
 #DOMAIN=ar53
 LAYERS=12
 
@@ -38,3 +38,10 @@ bloodhound-esm preprocess \
     --taxonomy /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_taxonomy_r220.tsv \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}
+
+python seqtree-representatives.py \
+    /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st \
+    /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_reps_r220.tar.gz \
+    /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}/esm${LAYERS}-reps.st
+
+seqtree prune /data/gpfs/projects/punim2199/preprocessed/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st 4 /data/gpfs/projects/punim2199/preprocessed/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    

@@ -1,14 +1,14 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=bloodhound-lightning
+#SBATCH --job-name=bloodhound
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-# SBATCH -t 7-0:00:00
-#SBATCH -t 4-0:00:00
+#SBATCH -t 7-0:00:00
+# SBATCH -t 4-0:00:00
  
 #SBATCH --mem-per-cpu=12G
  
@@ -28,36 +28,37 @@
 module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
+
+source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
+
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
- 
 export HF_HOME=/home/rturnbull/wytamma/huggingface
-
-source /home/rturnbull/wytamma/rob/bloodhound-lightning/.venv/bin/activate
-
 
 DOMAIN=bac120
 #DOMAIN=ar53
-ESM_LAYERS=6
-FEATURES=2048
+ESM_LAYERS=12
+#FEATURES=2048
+FEATURES=1536
 GROWTH=2
 LAYERS=2
 EMBEDDING=4
 LR=0.0001
 
-MEMMAP=/tmp/${DOMAIN}-esm${ESM_LAYERS}.np
+PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
+
+MEMMAP=/tmp/${DOMAIN}-esm${ESM_LAYERS}.npy
 if [[ ! -s "$MEMMAP" ]]; then
-        cp /data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.np $MEMMAP
+        cp ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy $MEMMAP
 fi
 
-SEQTREE_NAME=${DOMAIN}-esm${ESM_LAYERS}-reps-d4.st
-#SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.st
-SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}-reps.st
-#SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
+SEQTREE_NAME=esm${ESM_LAYERS}-reps.st
+#SEQTREE_NAME=esm${ESM_LAYERS}-reps-d4.st
+SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
 
 
 bloodhound-tools train  \
         --memmap  $MEMMAP \
-        --memmap-index  /data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
+        --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --seqtree  $SEQTREE \
         --features $FEATURES \
         --intermediate-layers $LAYERS \
@@ -65,7 +66,7 @@ bloodhound-tools train  \
         --family-embedding-size $EMBEDDING \
         --max-epochs 20 \
         --max-learning-rate $LR \
-        --run-name  ${SEQTREE_NAME}-b16f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR} \
+        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b16f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR} \
         --num-workers 4 \
         --wandb-project   "Bloodhound" \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
