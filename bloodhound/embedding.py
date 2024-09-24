@@ -15,6 +15,29 @@ import typer
 from .data import read_memmap, RANKS
 
 
+def set_validation_rank_to_seqtree(
+    seqtree:SeqTree,
+    validation_rank:str="species",
+    partitions:int=5,
+) -> SeqTree:
+    # find the taxonomic rank to use for the validation partition
+    validation_rank = validation_rank.lower()
+    assert validation_rank in RANKS
+    validation_rank_index = RANKS.index(validation_rank)
+
+    partitions_dict = {}
+    for key in seqtree:
+        node = seqtree.node(key)             
+        # Assign validation partition at set rank
+        partition_node = node.ancestors[validation_rank_index]
+        if partition_node not in partitions_dict:
+            partitions_dict[partition_node] = random.randint(0,partitions-1)
+
+        seqtree[key].partition = partitions_dict[partition_node]
+
+    return seqtree
+
+
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
     # assert len(accession) == len("RS_GCF_000006945.2")
@@ -170,6 +193,19 @@ class Embedding(CLIApp, ABC):
         accessions_wip.unlink()
 
     @main
+    def set_validation_rank(
+        self,
+        seqtree:Path=typer.Option(default=..., help="The path to the seqtree file."),
+        output:Path=typer.Option(default=..., help="The path to save the adapted seqtree file."),
+        validation_rank:str=typer.Option(default="species", help="The rank to hold out for cross-validation."),
+        partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
+    ) -> SeqTree:
+        seqtree = SeqTree.load(seqtree)
+        set_validation_rank_to_seqtree(seqtree, validation_rank=validation_rank, partitions=partitions)
+        seqtree.save(output)
+        return seqtree
+
+    @main
     def preprocess(
         self,
         taxonomy:Path=typer.Option(default=..., help="The path to the TSV taxonomy file (e.g. bac120_taxonomy_r220.tsv)."),
@@ -177,20 +213,12 @@ class Embedding(CLIApp, ABC):
         output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
         seed:int=typer.Option(default=42, help="The random seed."),
-        validation_rank:str=typer.Option(default="species", help="The rank to hold out for cross-validation."),
     ):
         seqtree, accession_to_node = self.build_seqtree(taxonomy)
-
-        # find the taxonomic rank to use for the validation partition
-        validation_rank = validation_rank.lower()
-        assert validation_rank in RANKS
-        validation_rank_index = RANKS.index(validation_rank)
 
         dtype = 'float16'
 
         random.seed(seed)
-
-        partitions_dict = {}
 
         print(f"Loading {marker_genes} file.")
         with tarfile.open(marker_genes, "r:gz") as tar:
@@ -199,13 +227,11 @@ class Embedding(CLIApp, ABC):
         print(f"{family_count} gene families found.")
 
         # Read and collect accessions
+        print(f"Building seqtree")
         keys = []
         counts = []
         for family_index in track(range(family_count)):
             keys_path = output_dir / f"{family_index}.txt"
-
-            # the partitions dict is reset for each family
-            partitions_dict = {}
 
             with open(keys_path) as f:
                 family_index_keys = [line.strip() for line in f]
@@ -215,26 +241,27 @@ class Embedding(CLIApp, ABC):
                 for key in family_index_keys:
                     species_accession = key.split("/")[0]
                     node = accession_to_node[species_accession]
-
-                    # Assign validation partition at set rank
-                    partition_node = node.ancestors[validation_rank_index]
-                    if partition_node not in partitions_dict:
-                        partitions_dict[partition_node] = random.randint(0,partitions-1)
-
-                    partition = partitions_dict[partition_node]
+                    partition = random.randint(0,partitions-1)
 
                     # Add to seqtree
                     seqtree.add(key, node, partition)
+        
+        # Save seqtree
+        seqtree_path = output_dir / f"{output_dir.name}.st"
+        print(f"Saving seqtree to {seqtree_path}")
+        seqtree.save(seqtree_path)
 
         # Concatenate numpy memmap arrays
         memmap_array = None
         memmap_array_path = output_dir / f"{output_dir.name}.npy"
+        print(f"Saving memmap to {memmap_array_path}")
         current_index = 0
-        for family_index, family_count in enumerate(counts):
+        for family_index, family_count in track(enumerate(counts), total=len(counts)):
             my_memmap_path = output_dir / f"{family_index}.npy"
 
             # Build memmap for gene family if it doesn't exist
             if not my_memmap_path.exists():
+                print("Building", my_memmap_path)
                 self.build_gene_array(marker_genes=marker_genes, family_index=family_index, output_dir=output_dir)
                 assert my_memmap_path.exists()
 
@@ -254,17 +281,11 @@ class Embedding(CLIApp, ABC):
         assert len(keys) == current_index
 
         memmap_array.flush()
-        
-        # Save seqtree
-        seqtree_path = output_dir / f"{output_dir.name}.st"
-        seqtree.save(seqtree_path)
 
         # Save keys
         keys_path = output_dir / f"{output_dir.name}.txt"
+        print(f"Saving keys to {keys_path}")        
         with open(keys_path, "w") as f:
             for key in keys:
                 print(key, file=f)
 
-        print(f"Saved seqtree to {seqtree_path}")
-        print(f"Saved memmap to {memmap_array_path}")
-        print(f"Saved keys to {keys_path}")

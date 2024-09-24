@@ -4,17 +4,16 @@
 #SBATCH --job-name=preprocess
  
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --array=1-119%10
+#SBATCH --cpus-per-task=1
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 12:00:00
+#SBATCH -t 4:00:00
  
-#SBATCH --mem-per-cpu=12G
+#SBATCH --mem-per-cpu=120G
  
-# SBATCH -p cascade
-#SBATCH -p gpu-a100,gpu-h100
-#SBATCH --gres=gpu:1
+#SBATCH -p cascade
+# SBATCH -p gpu-a100,gpu-h100
+# SBATCH --gres=gpu:1
 #SBATCH --account=punim2199
  
 # Specify your email address to be notified of progress.
