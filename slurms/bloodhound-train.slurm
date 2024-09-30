@@ -13,7 +13,7 @@
 #SBATCH --mem-per-cpu=12G
  
 # SBATCH -p cascade
-#SBATCH -p gpu-a100-short,gpu-h100,gpu-a100
+#SBATCH -p gpu-h100
 # SBATCH -p gpu-a100-short,gpu-a100,gpu-a100-preempt
 # SBATCH -p gpu-a100-short,gpu-a100
 # SBATCH -p gpu-a100-short
@@ -38,7 +38,7 @@ DOMAIN=bac120
 #DOMAIN=ar53
 ESM_LAYERS=12
 #FEATURES=2048
-FEATURES=1536
+FEATURES=768
 GROWTH=2
 LAYERS=2
 EMBEDDING=4
@@ -64,11 +64,10 @@ bloodhound-tools train  \
         --intermediate-layers $LAYERS \
         --growth-factor $GROWTH \
         --family-embedding-size $EMBEDDING \
-        --max-epochs 20 \
+        --max-epochs 1 \
         --max-learning-rate $LR \
         --run-name  ${DOMAIN}-${SEQTREE_NAME}-b16f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR} \
         --num-workers 4 \
-        --wandb-project   "Bloodhound" \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 
 
