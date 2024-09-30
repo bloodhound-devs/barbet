@@ -30,7 +30,7 @@ source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
-DOMAIN=$DOMAIN
+DOMAIN=bac120
 #DOMAIN=ar53
 LAYERS=12
 

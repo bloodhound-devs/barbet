@@ -5,7 +5,7 @@
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --array=1-119%10
+#SBATCH --array=0-119%10
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
 #SBATCH -t 12:00:00
