@@ -15,7 +15,7 @@ import pandas as pd
 
 
 from .modelsx import BloodhoundModel
-from .dataloaders import create_dataloaders, seqbank_dataloader
+from ._old_dataloaders import create_dataloaders, seqbank_dataloader
 from .embedding import get_key
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embeddings.esm import ESMEmbedding

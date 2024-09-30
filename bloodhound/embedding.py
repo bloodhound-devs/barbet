@@ -9,7 +9,7 @@ from corgi.seqtree import SeqTree
 import tarfile
 import torch
 from io import StringIO
-from torchapp.cli import CLIApp, main, method
+from torchapp.cli import CLIApp, tool, method
 import typer
 
 from .data import read_memmap, RANKS
@@ -94,7 +94,7 @@ class Embedding(CLIApp, ABC):
         seqtree = SeqTree(classification_tree=root)
         return seqtree, accession_to_node
 
-    @main("setup")
+    @tool("setup")
     def build_gene_array(
         self,
         marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
@@ -192,7 +192,7 @@ class Embedding(CLIApp, ABC):
         memmap_wip_path.unlink()
         accessions_wip.unlink()
 
-    @main
+    @tool
     def set_validation_rank(
         self,
         seqtree:Path=typer.Option(default=..., help="The path to the seqtree file."),
@@ -205,7 +205,7 @@ class Embedding(CLIApp, ABC):
         seqtree.save(output)
         return seqtree
 
-    @main
+    @tool
     def preprocess(
         self,
         taxonomy:Path=typer.Option(default=..., help="The path to the TSV taxonomy file (e.g. bac120_taxonomy_r220.tsv)."),
