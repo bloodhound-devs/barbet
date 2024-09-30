@@ -289,7 +289,7 @@ class Bloodhound(TorchApp):
             gene_family_count=len(self.gene_id_dict),
         )
     
-    @tool
+    @method
     def input_count(self) -> int:
         return 2
             
