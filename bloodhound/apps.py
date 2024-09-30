@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 from Bio import SeqIO
 from dataclasses import dataclass
 from hierarchicalsoftmax.metrics import greedy_accuracy
+from gtdbtk.markers import Markers
 
 import pandas as pd
 import os
@@ -335,83 +336,61 @@ class Bloodhound(TorchApp):
     def prediction_dataloader(
         self,
         module,
-        gtdbtk_output:Path=None,
-        embeddings:Path=None,
-        fasta:Path=None,
-        tophits:Path=None,
-        tigrfam:Path=None,
-        pfam:Path=None,
+        sequence:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
+        out_dir:Path=Param(help="A path to the output directory."),
+        extension='fa',
+        prefix="gtdbtk",
+        cpus=1,
+        # gtdbtk_output:Path=None,
+        # embeddings:Path=None,
+        # fasta:Path=None,
+        # tophits:Path=None,
+        # tigrfam:Path=None,
+        # pfam:Path=None,
         batch_size:int = 64,
         num_workers: int = 0,
+        archaea:bool=False,
     ) -> Iterable:
         # Get Embedding model from dataloaders
-        embedding = module.embedding        
-        assert embedding is not None
+        embedding_model = module.embedding        
+        assert embedding_model is not None
 
-        self.classification_tree = module.classification_tree
-        assert self.classification_tree is not None
-
-        # If gtdbtk output directory is given, then fetch the top hits from tigrfam
-        def get_subfile(directory:Path, pattern:str) -> Path|None:
-            return next(iter(directory.glob(pattern)), None)
-
-        if gtdbtk_output is not None and gtdbtk_output.exists() and gtdbtk_output.is_dir():
-            if not tophits:
-                tophits = get_subfile(gtdbtk_output, '*_tigrfam_tophit.tsv')
-            if not tigrfam:
-                tophits = get_subfile(gtdbtk_output, '*_tigrfam.tsv')
-            if not pfam:
-                pfam = get_subfile(gtdbtk_output, '*_pfam.tsv')
-            if not fasta:
-                fasta = get_subfile(gtdbtk_output, '*_protein.faa')
-
-        # Create dictionary from gene id to family id from the tophits or tigrfam or pfam
-        if tophits:
-            gene_family_dict = read_tophits(tophits)        
-        elif tigrfam and tigrfam.exists():
-            gene_family_dict = read_tigrfam(tigrfam)
-        elif pfam:
-            gene_family_dict = read_pfam(pfam)
-
-        # Find genes where we need to create the embeddings
-        accessions = list({f"{gene_id}/{family_id}" for gene_id, family_id in gene_family_dict.items()})
-        genes_to_do = [accession.split("/")[0] for accession in accessions]
-        count = len(accessions)
-
-        dtype = "float16"
-        if Path(embeddings).exists():
-            array = read_memmap(embeddings, count, dtype=dtype)
+        genomes = dict()
+        if Path(sequence).is_dir():
+            for path in Path(sequence).rglob(f"*.{extension}"):
+                genomes[path.stem] = path
         else:
-            # Generate embeddings if necessary
-            array = None
-            print(f"Generating embeddings for {len(accessions)} protein sequences")
-            assert fasta is not None
-            fasta = Path(fasta)
-            assert fasta.exists()
-            for record in SeqIO.parse(fasta, "fasta"):
-                if record.id in genes_to_do:
-                    family_id = gene_family_dict[record.id]
-                    print(record.id, family_id)
-                    vector = embedding(record.seq)
-                    if vector is not None and not torch.isnan(vector).any():                        
-                        # Initialise array if necessary
-                        if array is None:
-                            size = len(vector)
-                            shape = (count,size)
-                            array = np.memmap(embeddings, dtype=dtype, mode='w+', shape=shape)
+            genomes[Path(sequence).stem] = sequence
+    
+        os.environ["GTDBTK_DATA_PATH"] = "/data/gpfs/projects/punim2199/gambit_data/release214/"
+        markers = Markers(cpus)
+        markers.identify(genomes,
+                tln_tables=dict(),
+                out_dir=out_dir,
+                prefix=prefix,
+                force=False,
+                genes=False,
+                write_single_copy_genes=True
+            )
+    
+        if archaea:
+            single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/ar53")
+        else:
+            single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/bac120")
+    
+        embeddings = []
+        gene_family_name = []
+        for fasta in single_copy_fasta.rglob("*.fa"):
+            # read the fasta file sequence remove the header
+            seq = fasta.read_text().split("\n")[1]
+            vector =  embedding_model(seq)
+            if vector is not None and not torch.isnan(vector).any():
+                embeddings.append(vector.cpu().detach().clone().numpy().tobytes())
+                gene_family_name.append(fasta.stem)
+            del vector        
 
-                        # save vector to array
-                        index = genes_to_do.index(record.id)
-                        array[index] = vector.cpu().detach().clone().numpy()
-
-        dataset = BloodhoundDataset(
-            accessions=accessions, 
-            array=self.array,
-            gene_id_dict=self.gene_id_dict,
-        )
-
-        self.items = accessions
-
+        # Save the embeddings
+        dataset = (embeddings, gene_family_name)
         return DataLoader(dataset, batch_size=batch_size, num_workers=self.num_workers, shuffle=False)
 
     @method
@@ -514,37 +493,39 @@ class Bloodhound(TorchApp):
 
         return results_df
 
-    @method
-    def extra_callbacks_off(self, **kwargs):
-        from lightning.pytorch.callbacks import Callback
-        import tracemalloc
-        class MemoryLeakCallback(Callback):
-            def on_train_start(self, trainer, pl_module):
-                # Start tracing memory allocations at the beginning of the training
-                tracemalloc.start()
-                print("tracemalloc started")
+    # @method
+    # def extra_callbacks_off(self, **kwargs):
+    #     from lightning.pytorch.callbacks import Callback
+    #     import tracemalloc
+    #     class MemoryLeakCallback(Callback):
+    #         def on_train_start(self, trainer, pl_module):
+    #             # Start tracing memory allocations at the beginning of the training
+    #             tracemalloc.start()
+    #             print("tracemalloc started")
 
-            def on_train_batch_start(self, trainer, pl_module, *args, **kwargs):
-                # Take a snapshot before the batch starts
-                self.snapshot_before = tracemalloc.take_snapshot()
+    #         def on_train_batch_start(self, trainer, pl_module, *args, **kwargs):
+    #             # Take a snapshot before the batch starts
+    #             self.snapshot_before = tracemalloc.take_snapshot()
 
-            def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
-                # Take a snapshot after the batch ends
-                snapshot_after = tracemalloc.take_snapshot()
+    #         def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
+    #             # Take a snapshot after the batch ends
+    #             snapshot_after = tracemalloc.take_snapshot()
                 
-                # Compare the snapshots
-                stats = snapshot_after.compare_to(self.snapshot_before, 'lineno')
+    #             # Compare the snapshots
+    #             stats = snapshot_after.compare_to(self.snapshot_before, 'lineno')
                 
-                # Log the top memory-consuming lines
-                print(f"[Batch {trainer.global_step}] Memory differences:")
-                for stat in stats[:20]:
-                    print(stat)
+    #             # Log the top memory-consuming lines
+    #             print(f"[Batch {trainer.global_step}] Memory differences:")
+    #             for stat in stats[:20]:
+    #                 print(stat)
 
-                # Optionally, monitor peak memory usage
-                current, peak = tracemalloc.get_traced_memory()
-                print(f"Current memory usage: {current / 1024**2:.2f} MB; Peak: {peak / 1024**2:.2f} MB")
+    #             # Optionally, monitor peak memory usage
+    #             current, peak = tracemalloc.get_traced_memory()
+    #             print(f"Current memory usage: {current / 1024**2:.2f} MB; Peak: {peak / 1024**2:.2f} MB")
                 
-                # Clear traces if needed to prevent tracemalloc from consuming too much memory itself
-                tracemalloc.clear_traces()
+    #             # Clear traces if needed to prevent tracemalloc from consuming too much memory itself
+    #             tracemalloc.clear_traces()
 
-        return [MemoryLeakCallback()]
+    #     return [MemoryLeakCallback()]
+    
+
