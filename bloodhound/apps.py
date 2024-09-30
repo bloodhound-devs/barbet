@@ -133,6 +133,24 @@ class BloodhoundTrainingDataset(Dataset):
         return embedding, self.gene_id_dict[gene_id], node_id
 
 
+@dataclass(kw_only=True)
+class BloodhoundPredictionDataset(Dataset):
+    embeddings: list[torch.Tensor]
+    gene_family_names: list[str]
+
+    def __post_init__(self):
+        assert len(self.embeddings) == len(self.gene_family_names)
+
+    def __len__(self):
+        return len(self.gene_family_names)
+
+    def __getitem__(self, idx):
+        # return self.embeddings[idx], self.gene_family_names[idx]
+
+        # BIG HACK
+        return self.embeddings[idx], 0
+    
+
 @dataclass
 class BloodhoundDataModule(L.LightningDataModule):
     seqtree: SeqTree
@@ -304,17 +322,12 @@ class Bloodhound(TorchApp):
     
     @method    
     def metrics(self) -> list[tuple[str,Metric]]:
-        # return [] # hack
         rank_accuracy = RankAccuracyTorchMetric(
             root=self.classification_tree, 
             ranks={1+i:rank for i, rank in enumerate(RANKS)},
         )
                 
         return [('rank_accuracy', rank_accuracy)]
-        # return [
-        #     (rank, GreedyAccuracyTorchMetric(root=self.classification_tree, max_depth=i+1, name=rank))
-        #     for i, rank in enumerate(RANKS)
-        # ]
     
     @method    
     def data(
@@ -340,29 +353,29 @@ class Bloodhound(TorchApp):
         out_dir:Path=Param(help="A path to the output directory."),
         extension='fa',
         prefix="gtdbtk",
-        cpus=1,
-        # gtdbtk_output:Path=None,
-        # embeddings:Path=None,
-        # fasta:Path=None,
-        # tophits:Path=None,
-        # tigrfam:Path=None,
-        # pfam:Path=None,
+        cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
         archaea:bool=False,
     ) -> Iterable:
         # Get Embedding model from dataloaders
-        embedding_model = module.embedding        
+        # embedding_model = module.embedding        # 
+
+        # HACK
+        from .embeddings.esm import ESMEmbedding, ESMLayers
+        embedding_model = ESMEmbedding()
+        embedding_model.setup(layers=ESMLayers.T12, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
         assert embedding_model is not None
 
         genomes = dict()
         if Path(sequence).is_dir():
             for path in Path(sequence).rglob(f"*.{extension}"):
-                genomes[path.stem] = path
+                genomes[path.stem] = str(path)
         else:
-            genomes[Path(sequence).stem] = sequence
+            genomes[Path(sequence).stem] = str(sequence)
     
-        os.environ["GTDBTK_DATA_PATH"] = "/data/gpfs/projects/punim2199/gambit_data/release214/"
+        os.environ["GTDBTK_DATA_PATH"] = "/data/gpfs/projects/punim2199/gambit_data/release214/minimal/"
+
         markers = Markers(cpus)
         markers.identify(genomes,
                 tln_tables=dict(),
@@ -379,19 +392,23 @@ class Bloodhound(TorchApp):
             single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/bac120")
     
         embeddings = []
-        gene_family_name = []
+        gene_family_names = []
         for fasta in single_copy_fasta.rglob("*.fa"):
             # read the fasta file sequence remove the header
             seq = fasta.read_text().split("\n")[1]
             vector =  embedding_model(seq)
             if vector is not None and not torch.isnan(vector).any():
-                embeddings.append(vector.cpu().detach().clone().numpy().tobytes())
-                gene_family_name.append(fasta.stem)
+                vector = vector.cpu().detach().clone().numpy()
+                vector = torch.as_tensor(vector)
+                embeddings.append(vector)
+                gene_family_names.append(fasta.stem)
             del vector        
 
         # Save the embeddings
-        dataset = (embeddings, gene_family_name)
-        return DataLoader(dataset, batch_size=batch_size, num_workers=self.num_workers, shuffle=False)
+        dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_names=gene_family_names)
+        dataloader =  DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+
+        return dataloader
 
     @method
     def output_results(
@@ -407,6 +424,7 @@ class Bloodhound(TorchApp):
         output_correct:Path=None,
         **kwargs,
     ):
+        breakpoint()
         assert self.classification_tree # This should be saved from the learner
 
         # Sum the scores which is equivalent of multiplying the probabilities assuming that they are independent

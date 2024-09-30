@@ -6,6 +6,9 @@ from hierarchicalsoftmax import HierarchicalSoftmaxLazyLinear, SoftmaxNode
 class BloodhoundModel(nn.Module):
     def __init__(self, classification_tree:SoftmaxNode, gene_family_count:int, family_embedding_size:int=64, features:int=5120, intermediate_layers:int=0, growth_factor:float=2.0):
         super().__init__()
+
+        assert growth_factor > 0.0
+        
         self.classification_tree = classification_tree
         modules = [nn.LazyLinear(out_features=features), nn.PReLU()]
         for _ in range(intermediate_layers):
