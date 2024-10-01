@@ -43,6 +43,8 @@ GROWTH=2
 LAYERS=2
 EMBEDDING=4
 LR=0.0001
+EPOCHS=20
+BATCH=16
 
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
 
@@ -64,9 +66,9 @@ bloodhound-tools train  \
         --intermediate-layers $LAYERS \
         --growth-factor $GROWTH \
         --family-embedding-size $EMBEDDING \
-        --max-epochs 1 \
+        --max-epochs $EPOCHS \
         --max-learning-rate $LR \
-        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b16f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR} \
+        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR}ep${EPOCHS} \
         --num-workers 4 \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 

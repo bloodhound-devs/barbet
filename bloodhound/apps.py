@@ -277,9 +277,6 @@ class Bloodhound(TorchApp):
         if in_memory:
             self.array = np.array(self.array)
 
-
-
-
         self.classification_tree = self.seqtree.classification_tree
         assert self.classification_tree is not None
 
@@ -410,6 +407,12 @@ class Bloodhound(TorchApp):
 
         return dataloader
 
+    def node_to_str(self, node:SoftmaxNode) -> str:
+        """ 
+        Converts the node to a string
+        """
+        return str(node).split(",")[-1].strip()
+
     @method
     def output_results(
         self, 
@@ -420,18 +423,22 @@ class Bloodhound(TorchApp):
         image: Path = Param(default=None, help="A path to output the result as an image."),
         image_threshold:float = 0.005,
         prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
-        seqtree:Path = None,
+        seqtree:Path = Param(default=..., help="The tree for classification. CLASSIFICATION BE SAVED IN THE CHECKPOINT."),
         output_correct:Path=None,
         **kwargs,
     ):
-        breakpoint()
+        # hack
+        _x = SeqTree.load(seqtree)
+        self.classification_tree = _x.classification_tree
+        
         assert self.classification_tree # This should be saved from the learner
 
-        # Sum the scores which is equivalent of multiplying the probabilities assuming that they are independent
-        results = results[0].sum(axis=0, keepdims=True)
+        # Sum the scores which is equivalent of multiplying the probabilities (assumes independence)
+        results = results.sum(axis=0, keepdims=True)
 
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
-        category_names = [self.node_to_str(node) for node in self.classification_tree.node_list if not node.is_root]
+        
+        category_names = [self.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root]
 
         results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
         
@@ -460,6 +467,29 @@ class Bloodhound(TorchApp):
         # Reorder columns
         results_df = results_df[["greedy_prediction", "probability" ] + category_names]
 
+        # if seqtree is not None:
+        #     seqtree = SeqTree.load(seqtree)
+        #     prefix = get_key(self.accession, gene="")
+        #     for key in seqtree.keys():
+        #         if key.startswith(prefix):
+        #             break
+        #     correct_node = seqtree.node(key)
+        #     correct_ancestors = correct_node.ancestors + (correct_node,)
+        #     prediction_node = predictions[0]
+        #     prediction_ancestors = prediction_node.ancestors + (prediction_node,)
+        #     for i, rank in enumerate(RANKS):
+        #         prediction_rank = str(prediction_ancestors[i+1]).strip()
+        #         correct_rank = str(correct_ancestors[i+1]).strip()
+        #         rank_is_correct = (prediction_rank == correct_rank)
+        #         if rank_is_correct:
+        #             console.print(f"[green]{rank} correctly predicted as {prediction_rank}")
+        #         else:
+        #             console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
+        #         results_df[f"correct_{rank}"] = rank_is_correct
+
+        if not (image or output_csv or output_tips_csv):
+            print("No output files requested.")
+
         # Output images
         if image:
             console.print(f"Writing inference probability renders to: {image}")
@@ -473,29 +503,6 @@ class Bloodhound(TorchApp):
                 threshold=image_threshold,
             )
 
-        if seqtree is not None:
-            seqtree = SeqTree.load(seqtree)
-            prefix = get_key(self.accession, gene="")
-            for key in seqtree.keys():
-                if key.startswith(prefix):
-                    break
-            correct_node = seqtree.node(key)
-            correct_ancestors = correct_node.ancestors + (correct_node,)
-            prediction_node = predictions[0]
-            prediction_ancestors = prediction_node.ancestors + (prediction_node,)
-            for i, rank in enumerate(RANKS):
-                prediction_rank = str(prediction_ancestors[i+1]).strip()
-                correct_rank = str(correct_ancestors[i+1]).strip()
-                rank_is_correct = (prediction_rank == correct_rank)
-                if rank_is_correct:
-                    console.print(f"[green]{rank} correctly predicted as {prediction_rank}")
-                else:
-                    console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
-                results_df[f"correct_{rank}"] = rank_is_correct
-
-        if not (image or output_csv or output_tips_csv):
-            print("No output files requested.")
-
         if output_tips_csv:
             output_tips_csv = Path(output_tips_csv)
             output_tips_csv.parent.mkdir(exist_ok=True, parents=True)
@@ -507,7 +514,7 @@ class Bloodhound(TorchApp):
             output_csv = Path(output_csv)
             output_csv.parent.mkdir(exist_ok=True, parents=True)
             console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
-            results_df.to_csv(output_csv, index=False)
+            results_df.transpose().to_csv(output_csv)
 
         return results_df
 
