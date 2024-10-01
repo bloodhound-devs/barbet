@@ -56,4 +56,5 @@ bloodhound \
     --out-dir outputs \
     --sequence /data/gpfs/projects/punim2199/wytamma/dev/gambit/GCF_000145595.1.fna \
     --seqtree $SEQTREE \
-    --image GCF_000145595.1.png
+    --image outputs/GCF_000145595.1.png \
+    --output-csv outputs/GCF_000145595.1.csv

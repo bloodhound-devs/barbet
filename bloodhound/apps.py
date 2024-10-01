@@ -136,19 +136,16 @@ class BloodhoundTrainingDataset(Dataset):
 @dataclass(kw_only=True)
 class BloodhoundPredictionDataset(Dataset):
     embeddings: list[torch.Tensor]
-    gene_family_names: list[str]
+    gene_family_ids: list[int]
 
     def __post_init__(self):
-        assert len(self.embeddings) == len(self.gene_family_names)
+        assert len(self.embeddings) == len(self.gene_family_ids)
 
     def __len__(self):
-        return len(self.gene_family_names)
+        return len(self.gene_family_ids)
 
     def __getitem__(self, idx):
-        # return self.embeddings[idx], self.gene_family_names[idx]
-
-        # BIG HACK
-        return self.embeddings[idx], 0
+        return self.embeddings[idx], self.gene_family_ids[idx]
     
 
 @dataclass
@@ -353,16 +350,26 @@ class Bloodhound(TorchApp):
         cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
-        archaea:bool=False,
+        seqtree:Path = Param(default=..., help="The tree for classification. CLASSIFICATION BE SAVED IN THE CHECKPOINT."), # HACK
     ) -> Iterable:
         # Get Embedding model from dataloaders
         # embedding_model = module.embedding        # 
 
-        # HACK
+        ############### HACK ###############
+        _x = SeqTree.load(seqtree)
+        self.classification_tree = _x.classification_tree
+        family_ids = set()
+        for accession in _x:
+            gene_id = accession.split("/")[-1]
+            family_ids.add(gene_id)
+
+        self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
+
         from .embeddings.esm import ESMEmbedding, ESMLayers
         embedding_model = ESMEmbedding()
         embedding_model.setup(layers=ESMLayers.T12, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
         assert embedding_model is not None
+        ############### END HACK ###############
 
         genomes = dict()
         if Path(sequence).is_dir():
@@ -383,13 +390,14 @@ class Bloodhound(TorchApp):
                 write_single_copy_genes=True
             )
     
+        archaea = len(self.gene_id_dict) == 53
         if archaea:
             single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/ar53")
         else:
             single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/bac120")
     
         embeddings = []
-        gene_family_names = []
+        self.gene_family_names = []
         for fasta in single_copy_fasta.rglob("*.fa"):
             # read the fasta file sequence remove the header
             seq = fasta.read_text().split("\n")[1]
@@ -398,11 +406,13 @@ class Bloodhound(TorchApp):
                 vector = vector.cpu().detach().clone().numpy()
                 vector = torch.as_tensor(vector)
                 embeddings.append(vector)
-                gene_family_names.append(fasta.stem)
+                self.gene_family_names.append(fasta.stem)
             del vector        
 
+        gene_family_ids = [self.gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
+
         # Save the embeddings
-        dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_names=gene_family_names)
+        dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_ids=gene_family_ids)
         dataloader =  DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
         return dataloader
@@ -416,25 +426,21 @@ class Bloodhound(TorchApp):
     @method
     def output_results(
         self, 
-        results, 
+        gene_results, 
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
         output_gene_csv: Path = Param(default=None, help="A path to output the results for individual genes as a CSV."),
         output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
         image: Path = Param(default=None, help="A path to output the result as an image."),
         image_threshold:float = 0.005,
         prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
-        seqtree:Path = Param(default=..., help="The tree for classification. CLASSIFICATION BE SAVED IN THE CHECKPOINT."),
         output_correct:Path=None,
         **kwargs,
     ):
-        # hack
-        _x = SeqTree.load(seqtree)
-        self.classification_tree = _x.classification_tree
-        
-        assert self.classification_tree # This should be saved from the learner
+        assert self.gene_id_dict # This should be saved from the module
+        assert self.classification_tree # This should be saved from the module
 
         # Sum the scores which is equivalent of multiplying the probabilities (assumes independence)
-        results = results.sum(axis=0, keepdims=True)
+        results = gene_results.sum(axis=0, keepdims=True)
 
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
         
@@ -513,6 +519,13 @@ class Bloodhound(TorchApp):
         if output_csv:
             output_csv = Path(output_csv)
             output_csv.parent.mkdir(exist_ok=True, parents=True)
+            console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
+            results_df.transpose().to_csv(output_csv)
+
+        if output_gene_csv:
+            output_csv = Path(output_gene_csv)
+            output_csv.parent.mkdir(exist_ok=True, parents=True)
+            
             console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
             results_df.transpose().to_csv(output_csv)
 
