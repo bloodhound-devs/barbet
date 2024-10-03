@@ -369,32 +369,33 @@ class Bloodhound(TorchApp):
         embedding_model = ESMEmbedding()
         embedding_model.setup(layers=ESMLayers.T12, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
         assert embedding_model is not None
+        domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
         ############### END HACK ###############
 
         genomes = dict()
-        if Path(sequence).is_dir():
-            for path in Path(sequence).rglob(f"*.{extension}"):
+        sequence = Path(sequence)
+        if sequence.is_dir():
+            for path in sequence.rglob(f"*.{extension}"):
                 genomes[path.stem] = str(path)
         else:
-            genomes[Path(sequence).stem] = str(sequence)
+            genomes[sequence.stem] = str(sequence)
+
+        self.name = sequence.name
     
         os.environ["GTDBTK_DATA_PATH"] = "/data/gpfs/projects/punim2199/gambit_data/release214/minimal/"
 
         markers = Markers(cpus)
-        markers.identify(genomes,
-                tln_tables=dict(),
-                out_dir=out_dir,
-                prefix=prefix,
-                force=False,
-                genes=False,
-                write_single_copy_genes=True
-            )
+        markers.identify(
+            genomes,
+            tln_tables=dict(),
+            out_dir=out_dir,
+            prefix=prefix,
+            force=False,
+            genes=False,
+            write_single_copy_genes=True,
+        )
     
-        archaea = len(self.gene_id_dict) == 53
-        if archaea:
-            single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/ar53")
-        else:
-            single_copy_fasta = out_dir / Path("identify/intermediate_results/single_copy_fasta/bac120")
+        single_copy_fasta = out_dir / "identify/intermediate_results/single_copy_fasta"/domain
     
         embeddings = []
         self.gene_family_names = []
@@ -411,7 +412,9 @@ class Bloodhound(TorchApp):
 
         gene_family_ids = [self.gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
 
-        # Save the embeddings
+        # TODO Save the embeddings
+
+
         dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_ids=gene_family_ids)
         dataloader =  DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
@@ -422,26 +425,17 @@ class Bloodhound(TorchApp):
         Converts the node to a string
         """
         return str(node).split(",")[-1].strip()
-
-    @method
-    def output_results(
-        self, 
-        gene_results, 
-        output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        output_gene_csv: Path = Param(default=None, help="A path to output the results for individual genes as a CSV."),
-        output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
-        image: Path = Param(default=None, help="A path to output the result as an image."),
-        image_threshold:float = 0.005,
-        prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
-        output_correct:Path=None,
-        **kwargs,
-    ):
-        assert self.gene_id_dict # This should be saved from the module
-        assert self.classification_tree # This should be saved from the module
-
-        # Sum the scores which is equivalent of multiplying the probabilities (assumes independence)
-        results = gene_results.sum(axis=0, keepdims=True)
-
+    
+    def output_results_to_df(
+        self,
+        names,
+        results,
+        output_csv: Path,
+        output_tips_csv: Path,
+        image_dir: Path,
+        image_threshold:float,
+        prediction_threshold:float,
+    ) -> pd.DataFrame:
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
         
         category_names = [self.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root]
@@ -470,37 +464,21 @@ class Bloodhound(TorchApp):
         
         results_df['probability'] = results_df.apply(get_prediction_probability, axis=1)
 
+        results_df["name"] = names
+
         # Reorder columns
-        results_df = results_df[["greedy_prediction", "probability" ] + category_names]
+        results_df = results_df[["name", "greedy_prediction", "probability" ] + category_names]
 
-        # if seqtree is not None:
-        #     seqtree = SeqTree.load(seqtree)
-        #     prefix = get_key(self.accession, gene="")
-        #     for key in seqtree.keys():
-        #         if key.startswith(prefix):
-        #             break
-        #     correct_node = seqtree.node(key)
-        #     correct_ancestors = correct_node.ancestors + (correct_node,)
-        #     prediction_node = predictions[0]
-        #     prediction_ancestors = prediction_node.ancestors + (prediction_node,)
-        #     for i, rank in enumerate(RANKS):
-        #         prediction_rank = str(prediction_ancestors[i+1]).strip()
-        #         correct_rank = str(correct_ancestors[i+1]).strip()
-        #         rank_is_correct = (prediction_rank == correct_rank)
-        #         if rank_is_correct:
-        #             console.print(f"[green]{rank} correctly predicted as {prediction_rank}")
-        #         else:
-        #             console.print(f"[red]{rank} incorrectly predicted as {prediction_rank} instead of {correct_rank}")
-        #         results_df[f"correct_{rank}"] = rank_is_correct
+        results_df.set_index('name')
 
-        if not (image or output_csv or output_tips_csv):
+        if not (image_dir or output_csv or output_tips_csv):
             print("No output files requested.")
 
         # Output images
-        if image:
-            console.print(f"Writing inference probability renders to: {image}")
-            image = Path(image)
-            image_paths = [image]
+        if image_dir:
+            console.print(f"Writing inference probability renders to: {image_dir}")
+            image_dir = Path(image_dir)
+            image_paths = [image_dir/f"{name}.png" for name in results_df["name"]]
             render_probabilities(
                 root=self.classification_tree, 
                 filepaths=image_paths,
@@ -522,14 +500,60 @@ class Bloodhound(TorchApp):
             console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
             results_df.transpose().to_csv(output_csv)
 
-        if output_gene_csv:
-            output_csv = Path(output_gene_csv)
-            output_csv.parent.mkdir(exist_ok=True, parents=True)
-            
-            console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
-            results_df.transpose().to_csv(output_csv)
-
         return results_df
+
+    @method
+    def output_results(
+        self, 
+        gene_results, 
+        output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
+        output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
+        output_averaged_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
+        output_averaged_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
+        output_gene_csv: Path = Param(default=None, help="A path to output the results for individual genes as a CSV."),
+        output_gene_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
+        image_dir: Path = Param(default=None, help="A path to output the results as images."),
+        image_threshold:float = 0.005,
+        prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
+        gene_images:bool=False,
+        **kwargs,
+    ):
+        assert self.gene_id_dict # This should be saved from the module
+        assert self.classification_tree # This should be saved from the module
+
+        if output_gene_csv or output_gene_tips_csv or gene_images:
+            self.output_results_to_df(
+                self.gene_family_names,
+                gene_results,
+                output_gene_csv,
+                output_gene_tips_csv,
+                image_dir if gene_images else None,
+                image_threshold=image_threshold,
+                prediction_threshold=prediction_threshold,
+            )
+
+        result = self.output_results_to_df(
+            [self.name+"-summed"],
+            gene_results.sum(axis=0, keepdims=True),
+            output_csv,
+            output_tips_csv,
+            image_dir,
+            image_threshold=image_threshold,
+            prediction_threshold=prediction_threshold,
+        )
+
+        if output_averaged_csv or output_averaged_tips_csv:
+            self.output_results_to_df(
+                [self.name+"-averaged"],
+                gene_results.mean(axis=0, keepdims=True),
+                output_averaged_csv,
+                output_averaged_tips_csv,
+                image_dir,
+                image_threshold=image_threshold,
+                prediction_threshold=prediction_threshold,
+            )
+
+        return result
 
     # @method
     # def extra_callbacks_off(self, **kwargs):

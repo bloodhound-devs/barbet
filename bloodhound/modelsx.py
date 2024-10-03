@@ -23,8 +23,6 @@ class BloodhoundModel(nn.Module):
         self.sequential = nn.Sequential(*modules)
 
     def forward(self, x, gene_family_id):
-        breakpoint()
-        
         # Concatenate an embedding for the marker gene family if the embedding module exists
         if self.family_embedding:
             family_embeddings = self.family_embedding(gene_family_id)
