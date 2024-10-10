@@ -5,8 +5,6 @@ import torch
 from torchapp.cli import method
 from bloodhound.embedding import Embedding
 
-
-
 class ESMLayers(Enum):
     T6 = "6"
     T12 = "12"

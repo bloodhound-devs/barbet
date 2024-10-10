@@ -168,3 +168,4 @@ cython_debug/
 #.idea/
 lightning_logs/
 logs/
+output/batch/**/*

@@ -26,18 +26,19 @@ bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "lightning"}
 
 # alphafold = "^2.0.0" # PyPi version of alphafold is stuck at 2.0.0 and it won't work (throws error about missing alphafold.model and alphafold.model.tf
 # alphafold = {git = "https://github.com/google-deepmind/alphafold.git", rev = "main"}
+alphafold-colabfold = { version = "v2.3.6" } # Hopefully fixing the haiku flat_param 'fuse' error
 
+jax = { version = "0.4.28", extras = ["cuda12"] }
 torch = "=2.2.0"
 transformers = "^4.40.2"
 sentencepiece = "^0.2.0"
 dm-haiku = "^0.0.12"
-jax = "^0.4.28"
 tqdm = "^4.66.4"
 jaxlib = "^0.4.28"
 wandb = "^0.17.0"
 biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module has been deprecated in 1.83 and it was not there before 1.78. Needed for alphafold >=2.3.2
 lightning = "^2.3.3"
-
+silence-tensorflow = "^1.2.2"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"
@@ -69,6 +70,8 @@ bloodhound-tools = "bloodhound.apps:Bloodhound.tools"
 
 bloodhound-esm = "bloodhound.embeddings.esm:ESMEmbedding.tools"
 bloodhound-prostt5 = "bloodhound.embeddings.prost_t5:ProstT5Embedding.main"
-bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
 
-bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"
+
+bloodhound-af = "bloodhound.embeddings.alphafold:AFEmbedding.tools"
+# bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
+# bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"
