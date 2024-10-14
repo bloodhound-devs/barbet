@@ -43,7 +43,13 @@ if TYPE_CHECKING:
 
 import alphafold.common.protein as af_protein
 from alphafold.data import feature_processing,msa_pairing,pipeline,pipeline_multimer,templates
-from cf_utils import ACCEPT_DEFAULT_TERMS,DEFAULT_API_SERVER,NO_GPU_FOUND,CIF_REVISION_DATE,safe_filename,setup_logging,CFMMCIFIO
+
+
+
+from bloodhound.embeddings.af.models import load_models_and_params
+from bloodhound.embeddings.af.cf_utils import make_fixed_size,ACCEPT_DEFAULT_TERMS,DEFAULT_API_SERVER,NO_GPU_FOUND,CIF_REVISION_DATE,safe_filename,setup_logging,CFMMCIFIO
+from bloodhound.embeddings.af.mmseq2 import run_mmseqs2
+
 
 from Bio.PDB import MMCIFParser, PDBParser, MMCIF2Dict
 from Bio.PDB.PDBIO import Select
@@ -71,7 +77,6 @@ file_handler.setFormatter(formatter)
 
 logger.addHandler(file_handler)
 logger.addHandler(stdout_handler)
-
 
 
 # backward-compatibility with old options
@@ -259,16 +264,8 @@ class AlphafoldBatchRunner:
         self.use_amber = num_models > 0 and num_relax > 0
 
         self.check_available_devices()
-        self.config_setup()
-        self.config_out_file = result_dir.joinpath("config.json")
-        self.config_out_file.write_text(json.dumps(self.config, indent=4))        
-        
-        if self.pdb_hit_file is not None:
-            if self.local_pdb_path is None:
-                raise ValueError("local_pdb_path is not specified.")
-            else:
-                self.custom_template_path = self.result_dir / "templates"
-                self.put_mmciffiles_into_resultdir()
+        self.config_setup() 
+        self.setup_pdb()
         
         if self.custom_template_path is not None:
             self.mk_hhsearch_db()
@@ -276,8 +273,7 @@ class AlphafoldBatchRunner:
         self.first_job = True
 
         
-
-    def check_available_devices():        
+    def check_available_devices(self):     
         # check what device is available
         try:
             # check if TPU is available
@@ -314,13 +310,13 @@ class AlphafoldBatchRunner:
             self.rank_by = "plddt"
 
         # get max length
-        max_len = 0
-        max_num = 0
+        self.max_len = 0
+        self.max_num = 0
         for _, query_sequence, _ in self.queries:
             N = 1 if isinstance(query_sequence,str) else len(query_sequence)
             L = len("".join(query_sequence))
-            if L > max_len: max_len = L
-            if N > max_num: max_num = N
+            if L > self.max_len: self.max_len = L
+            if N > self.max_num: self.max_num = N
 
         # get max sequences
         # 512 5120 = alphafold_ptm (models 1,3,4)
@@ -339,7 +335,7 @@ class AlphafoldBatchRunner:
 
         if self.msa_mode == "single_sequence":
             num_seqs = 1
-            if self.is_complex and "multimer" not in self.model_type: num_seqs += max_num
+            if self.is_complex and "multimer" not in self.model_type: num_seqs += self.max_num
             if self.use_templates: num_seqs += 4
             self.max_seq = min(num_seqs, self.max_seq)
             self.max_extra_seq = max(min(num_seqs - self.max_seq, self.max_extra_seq), 1)
@@ -379,6 +375,16 @@ class AlphafoldBatchRunner:
             "use_bfloat16": self.use_bfloat16,
             "version": "bloodhound-colabfold",
         }
+        self.config_out_file = self.result_dir.joinpath("config.json")
+        self.config_out_file.write_text(json.dumps(self.config, indent=4))    
+        
+    def setup_pdb(self):        
+        if self.pdb_hit_file is not None:
+            if self.local_pdb_path is None:
+                raise ValueError("local_pdb_path is not specified.")
+            else:
+                self.custom_template_path = self.result_dir / "templates"
+                self.put_mmciffiles_into_resultdir()   
 
 
     def put_mmciffiles_into_resultdir(self, max_num_templates: int = 20,):
@@ -437,6 +443,7 @@ class AlphafoldBatchRunner:
         cif_io = CFMMCIFIO()
         cif_io.set_structure(structure)
         cif_io.save(str(cif_file), ReplaceOrRemoveHetatmSelect())
+        
 
     def validate_and_fix_mmcif(self, cif_file: Path):
         """validate presence of _entity_poly_seq in cif file and add revision_date if missing"""
@@ -459,6 +466,7 @@ class AlphafoldBatchRunner:
             shutil.copy2(cif_file, str(cif_file) + ".bak")
             with open(cif_file, "a") as f:
                 f.write(CIF_REVISION_DATE)
+                
 
     def mk_hhsearch_db(self):
         template_path = Path(self.custom_template_path)
@@ -539,7 +547,7 @@ class AlphafoldBatchRunner:
                 None,
                 [query_sequence],
                 [1],
-                [mk_mock_template(query_sequence)],
+                [self.mk_mock_template(query_sequence)],
             )
 
         if len(a3m_lines) < 3:
@@ -610,7 +618,7 @@ class AlphafoldBatchRunner:
             paired_msa = None
         template_features = []
         for query_seq in query_seqs_unique:
-            template_feature = mk_mock_template(query_seq)
+            template_feature = self.mk_mock_template(query_seq)
             template_features.append(template_feature)
 
         return (
@@ -620,6 +628,49 @@ class AlphafoldBatchRunner:
             query_seqs_cardinality,
             template_features,
         )
+        
+    
+    def pair_sequences(
+        self,
+        a3m_lines: List[str], query_sequences: List[str], query_cardinality: List[int]
+    ) -> str:
+        a3m_line_paired = [""] * len(a3m_lines[0].splitlines())
+        for n, seq in enumerate(query_sequences):
+            lines = a3m_lines[n].splitlines()
+            for i, line in enumerate(lines):
+                if line.startswith(">"):
+                    if n != 0:
+                        line = line.replace(">", "\t", 1)
+                    a3m_line_paired[i] = a3m_line_paired[i] + line
+                else:
+                    a3m_line_paired[i] = a3m_line_paired[i] + line * query_cardinality[n]
+        return "\n".join(a3m_line_paired)
+
+    def pad_sequences(
+        self,
+        a3m_lines: List[str], query_sequences: List[str], query_cardinality: List[int]
+    ) -> str:
+        _blank_seq = [
+            ("-" * len(seq))
+            for n, seq in enumerate(query_sequences)
+            for _ in range(query_cardinality[n])
+        ]
+        a3m_lines_combined = []
+        pos = 0
+        for n, seq in enumerate(query_sequences):
+            for j in range(0, query_cardinality[n]):
+                lines = a3m_lines[n].split("\n")
+                for a3m_line in lines:
+                    if len(a3m_line) == 0:
+                        continue
+                    if a3m_line.startswith(">"):
+                        a3m_lines_combined.append(a3m_line)
+                    else:
+                        a3m_lines_combined.append(
+                            "".join(_blank_seq[:pos] + [a3m_line] + _blank_seq[pos + 1 :])
+                        )
+                pos += 1
+        return "\n".join(a3m_lines_combined)
         
         
     def get_msa_and_templates(
@@ -631,8 +682,6 @@ class AlphafoldBatchRunner:
     ) -> Tuple[
         Optional[List[str]], Optional[List[str]], List[str], List[int], List[Dict[str, Any]]
     ]:
-        from mmseq2 import run_mmseqs2
-
         use_env = msa_mode == "mmseqs2_uniref_env" or msa_mode == "mmseqs2_uniref_env_envpair"
         use_envpair = msa_mode == "mmseqs2_uniref_env_envpair"
         if isinstance(query_sequences, str): query_sequences = [query_sequences]
@@ -776,7 +825,7 @@ class AlphafoldBatchRunner:
         msa += ",".join(map(str, query_seqs_cardinality)) + "\n"
         # build msa with cardinality of 1, it makes it easier to parse and manipulate
         query_seqs_cardinality = [1 for _ in query_seqs_cardinality]
-        msa += pair_msa(query_seqs_unique, query_seqs_cardinality, paired_msa, unpaired_msa)
+        msa += self.pair_msa(query_seqs_unique, query_seqs_cardinality, paired_msa, unpaired_msa)
         return msa
 
     
@@ -801,9 +850,9 @@ class AlphafoldBatchRunner:
 
             # bugfix
             a3m_lines = f">0\n{full_sequence}\n"
-            a3m_lines += pair_msa(query_seqs_unique, query_seqs_cardinality, paired_msa, unpaired_msa)
+            a3m_lines += self.pair_msa(query_seqs_unique, query_seqs_cardinality, paired_msa, unpaired_msa)
 
-            input_feature = build_monomer_feature(full_sequence, a3m_lines, mk_mock_template(full_sequence))
+            input_feature = self.build_monomer_feature(full_sequence, a3m_lines, self.mk_mock_template(full_sequence))
             input_feature["residue_index"] = np.concatenate([np.arange(L) for L in Ls])
             input_feature["asym_id"] = np.concatenate([np.full(L,n) for n,L in enumerate(Ls)])
             if any(
@@ -813,7 +862,7 @@ class AlphafoldBatchRunner:
                     for template in i["template_domain_names"]
                 ]
             ):
-                logger.warning(f"{model_type} complex does not consider templates. Chose multimer model-type for template support.")
+                logger.warning(f"{self.model_type} complex does not consider templates. Chose multimer model-type for template support.")
 
         else:
             features_for_chain = {}
@@ -826,7 +875,7 @@ class AlphafoldBatchRunner:
                 else:
                     input_msa = unpaired_msa[sequence_index]
 
-                feature_dict = build_monomer_feature(sequence, input_msa, template_features[sequence_index])
+                feature_dict = self.build_monomer_feature(sequence, input_msa, template_features[sequence_index])
 
                 # for each copy
                 for cardinality in range(0, query_seqs_cardinality[sequence_index]):
@@ -844,12 +893,81 @@ class AlphafoldBatchRunner:
                 ]
             }
         return (input_feature, domain_names)
+    
+    
 
+    def mk_mock_template(self, query_sequence: Union[List[str], str], num_temp: int = 1) -> Dict[str, Any]:
+        ln = (
+            len(query_sequence)
+            if isinstance(query_sequence, str)
+            else sum(len(s) for s in query_sequence)
+        )
+        output_templates_sequence = "A" * ln
+        output_confidence_scores = np.full(ln, 1.0)
+
+        templates_all_atom_positions = np.zeros(
+            (ln, templates.residue_constants.atom_type_num, 3)
+        )
+        templates_all_atom_masks = np.zeros((ln, templates.residue_constants.atom_type_num))
+        templates_aatype = templates.residue_constants.sequence_to_onehot(
+            output_templates_sequence, templates.residue_constants.HHBLITS_AA_TO_ID
+        )
+        template_features = {
+            "template_all_atom_positions": np.tile(
+                templates_all_atom_positions[None], [num_temp, 1, 1, 1]
+            ),
+            "template_all_atom_masks": np.tile(
+                templates_all_atom_masks[None], [num_temp, 1, 1]
+            ),
+            "template_sequence": [f"none".encode()] * num_temp,
+            "template_aatype": np.tile(np.array(templates_aatype)[None], [num_temp, 1, 1]),
+            "template_confidence_scores": np.tile(
+                output_confidence_scores[None], [num_temp, 1]
+            ),
+            "template_domain_names": [f"none".encode()] * num_temp,
+            "template_release_date": [f"none".encode()] * num_temp,
+            "template_sum_probs": np.zeros([num_temp], dtype=np.float32),
+        }
+        return template_features
+    
+    
+
+    def build_monomer_feature(self, sequence: str, unpaired_msa: str, template_features: Dict[str, Any]):
+        msa = pipeline.parsers.parse_a3m(unpaired_msa)
+        # gather features
+        return {
+            **pipeline.make_sequence_features(
+                sequence=sequence, description="none", num_res=len(sequence)
+            ),
+            **pipeline.make_msa_features([msa]),
+            **template_features,
+        }
+
+
+    def pair_msa(
+        self,
+        query_seqs_unique: List[str],
+        query_seqs_cardinality: List[int],
+        paired_msa: Optional[List[str]],
+        unpaired_msa: Optional[List[str]],
+    ) -> str:
+        if paired_msa is None and unpaired_msa is not None:
+            a3m_lines = self.pad_sequences(unpaired_msa, query_seqs_unique, query_seqs_cardinality)
+        elif paired_msa is not None and unpaired_msa is not None:
+            a3m_lines = (
+                self.pair_sequences(paired_msa, query_seqs_unique, query_seqs_cardinality)
+                + "\n" +self.pad_sequences(unpaired_msa, query_seqs_unique, query_seqs_cardinality)
+            )
+        elif paired_msa is not None and unpaired_msa is None:
+            a3m_lines = self.pair_sequences(paired_msa, query_seqs_unique, query_seqs_cardinality)
+        else:
+            raise ValueError(f"Invalid pairing")
+        return a3m_lines
                     
     def run(self):
-        self.pad_len = 0
-        self.ranks = []
-        self.metrics = []
+        pad_len = 0
+        ranks = []
+        metrics = []
         job_number = 0
         for job_number, (raw_jobname, query_sequence, a3m_lines) in enumerate(self.queries):
             if self.jobname_prefix is not None:
@@ -918,11 +1036,9 @@ class AlphafoldBatchRunner:
                 # to allow display of MSA info during colab/chimera run (thanks tomgoddard)
                 if self.feature_dict_callback is not None:
                     self.feature_dict_callback(feature_dict)
-
             except Exception as e:
                 logger.exception(f"Could not generate input features {jobname}: {e}")
                 continue
-
 
             if self.use_templates:
                 templates_file = self.result_dir.joinpath(f"{jobname}_template_domain_names.json")
@@ -964,7 +1080,6 @@ class AlphafoldBatchRunner:
                         max_extra_seq = max(min(num_seqs - max_seq, max_extra_seq), 1)
                         logger.info(f"Setting max_seq={max_seq}, max_extra_seq={max_extra_seq}")
 
-                    from models import load_models_and_params
                     model_runner_and_params = load_models_and_params(
                         num_models=self.num_models,
                         use_templates=self.use_templates,
@@ -1010,7 +1125,6 @@ class AlphafoldBatchRunner:
         pad_len: int,
         use_templates: bool,
     ) -> model.features.FeatureDict:
-        from cf_utils import make_fixed_size
 
         model_config = model_runner.config
         eval_cfg = model_config.data.eval
@@ -1042,6 +1156,7 @@ class AlphafoldBatchRunner:
         prefix: str,
         feature_dict: Dict[str, Any],
         sequences_lengths: List[int],
+        pad_len: int,
         model_runner_and_params: List[Tuple[str, model.RunModel, haiku.Params]],
     ):
         """Predicts structure using AlphaFold for the given sequence."""
@@ -1075,9 +1190,9 @@ class AlphafoldBatchRunner:
                         input_features = model_runner.process_features(feature_dict, random_seed=seed)
                         r = input_features["aatype"].shape[0]
                         input_features["asym_id"] = np.tile(feature_dict["asym_id"],r).reshape(r,-1)
-                        if seq_len < self.pad_len:
-                            input_features = self.pad_input(input_features, model_runner,model_name, self.pad_len, self.use_templates)
-                            logger.info(f"Padding length to {self.pad_len}")
+                        if seq_len < pad_len:
+                            input_features = self.pad_input(input_features, model_runner,model_name, pad_len, self.use_templates)
+                            logger.info(f"Padding length to {pad_len}")
 
                 tag = f"{self.model_type}_{model_name}_seed_{seed:03d}"
                 model_names.append(tag)

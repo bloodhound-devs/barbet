@@ -72,6 +72,8 @@ bloodhound-esm = "bloodhound.embeddings.esm:ESMEmbedding.tools"
 bloodhound-prostt5 = "bloodhound.embeddings.prost_t5:ProstT5Embedding.main"
 
 
-bloodhound-af = "bloodhound.embeddings.alphafold:AFEmbedding.tools"
+# bloodhound-af = "bloodhound.embeddings.alphafold:AFEmbedding.tools"
+bloodhound-af-class = "bloodhound.embeddings.alphafold:AFEmbedding.test_class"
+bloodhound-af = "bloodhound.embeddings.alphafold:AFEmbedding.test"
 # bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
 # bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"

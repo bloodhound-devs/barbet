@@ -55,7 +55,7 @@ from alphafold.data import (
     pipeline_multimer,
     templates,
 )
-from cf_utils import (
+from bloodhound.embeddings.af.cf_utils import (
     ACCEPT_DEFAULT_TERMS,
     DEFAULT_API_SERVER,
     NO_GPU_FOUND,
@@ -674,7 +674,7 @@ def get_msa_and_templates(
 ) -> Tuple[
     Optional[List[str]], Optional[List[str]], List[str], List[int], List[Dict[str, Any]]
 ]:
-    from mmseq2 import run_mmseqs2
+    from bloodhound.embeddings.af.mmseq2 import run_mmseqs2
 
     use_env = msa_mode == "mmseqs2_uniref_env" or msa_mode == "mmseqs2_uniref_env_envpair"
     use_envpair = msa_mode == "mmseqs2_uniref_env_envpair"
@@ -1136,7 +1136,7 @@ def run(
             # disable GPU on tensorflow
             tf.config.set_visible_devices([], 'GPU')
 
-    from models import load_models_and_params
+    from bloodhound.embeddings.af.models import load_models_and_params
 
     data_dir = Path(data_dir)
     result_dir = Path(result_dir)
