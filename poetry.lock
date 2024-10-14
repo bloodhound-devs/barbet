@@ -6148,7 +6148,7 @@ optree = ["optree (>=0.9.1)"]
 
 [[package]]
 name = "torchapp"
-version = "0.4.5"
+version = "0.4.6"
 description = "A wrapper for fastai projects to create easy command-line inferfaces and manage hyper-parameter tuning."
 optional = false
 python-versions = ">=3.10,<3.12"
@@ -6182,7 +6182,7 @@ wandb = ">=0.12.9"
 type = "git"
 url = "https://github.com/rbturnbull/torchapp.git"
 reference = "lightning"
-resolved_reference = "327e15b61ab135743204ba715c024a58bddbc239"
+resolved_reference = "c32027f8e95f0157134665ea1c109fec52bca4aa"
 
 [[package]]
 name = "torchmetrics"
