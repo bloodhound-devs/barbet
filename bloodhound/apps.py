@@ -27,7 +27,7 @@ from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
 from .data import read_memmap, RANKS, gene_id_from_accession
-
+from .embeddings.esm import ESMEmbedding, ESMLayers
 
 console = Console()
 
@@ -340,6 +340,24 @@ class Bloodhound(TorchApp):
         )
     
     @method
+    def extra_hyperparameters(self, embedding_model:str="") -> dict:
+        """ Extra hyperparameters to save with the module. """
+        assert embedding_model, f"Please provide an embedding model."
+        embedding_model = embedding_model.lower()
+        if embedding_model.startswith("esm"):
+            layers = embedding_model[3:].strip()
+            embedding_model = ESMEmbedding()
+            embedding_model.setup(layers=layers)
+        else:
+            raise ValueError(f"Cannot understand embedding model: {embedding_model}")
+
+        return dict(
+            embedding_model=embedding_model,
+            classification_tree=self.seqtree.classification_tree,
+            gene_id_dict=self.gene_id_dict,
+        )
+    
+    @method
     def prediction_dataloader(
         self,
         module,
@@ -350,27 +368,12 @@ class Bloodhound(TorchApp):
         cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
-        seqtree:Path = Param(default=..., help="The tree for classification. CLASSIFICATION BE SAVED IN THE CHECKPOINT."), # HACK
     ) -> Iterable:
-        # Get Embedding model from dataloaders
-        # embedding_model = module.embedding        # 
-
-        ############### HACK ###############
-        _x = SeqTree.load(seqtree)
-        self.classification_tree = _x.classification_tree
-        family_ids = set()
-        for accession in _x:
-            gene_id = accession.split("/")[-1]
-            family_ids.add(gene_id)
-
-        self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
-
-        from .embeddings.esm import ESMEmbedding, ESMLayers
-        embedding_model = ESMEmbedding()
-        embedding_model.setup(layers=ESMLayers.T12, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
-        assert embedding_model is not None
-        domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
-        ############### END HACK ###############
+        # Get hyperparameters from checkpoint
+        embedding_model = module.hparams.embedding_model
+        self.classification_tree = module.hparams.classification_tree
+        gene_id_dict = module.hparams.gene_id_dict
+        domain = "ar53" if len(gene_id_dict) == 53 else "bac120"
 
         genomes = dict()
         sequence = Path(sequence)
@@ -410,7 +413,7 @@ class Bloodhound(TorchApp):
                 self.gene_family_names.append(fasta.stem)
             del vector        
 
-        gene_family_ids = [self.gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
+        gene_family_ids = [gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
 
         # TODO Save the embeddings
 
@@ -518,8 +521,8 @@ class Bloodhound(TorchApp):
         gene_images:bool=False,
         **kwargs,
     ):
-        assert self.gene_id_dict # This should be saved from the module
-        assert self.classification_tree # This should be saved from the module
+        assert self.gene_id_dict
+        assert self.classification_tree
 
         if output_gene_csv or output_gene_tips_csv or gene_images:
             self.output_results_to_df(

@@ -15,6 +15,13 @@ class ESMLayers(Enum):
     T36 = "36"
     T48 = "48"
 
+    @classmethod
+    def from_value(cls, value: int|str) -> "ESMLayers":
+        for layer in cls:
+            if layer.value == str(value):
+                return layer
+        return None
+
     def model_name(self) -> str:
         match self:
             case ESMLayers.T48:
@@ -42,7 +49,11 @@ class ESMEmbedding(Embedding):
         hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
     ):
         self.layers = layers
-        assert layers in ESMLayers, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
+        if isinstance(layers, (str,int)):
+            layers = ESMLayers.from_value(layers)
+
+        assert layers is not None, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
+        assert isinstance(layers, ESMLayers)
 
         self.hub_dir = hub_dir
         if hub_dir:

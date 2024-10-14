@@ -233,6 +233,10 @@ class Embedding(CLIApp, ABC):
         for family_index in track(range(family_count)):
             keys_path = output_dir / f"{family_index}.txt"
 
+            if not keys_path.exists():
+                counts.append(0)
+                continue
+
             with open(keys_path) as f:
                 family_index_keys = [line.strip() for line in f]
                 keys += family_index_keys
@@ -246,6 +250,8 @@ class Embedding(CLIApp, ABC):
                     # Add to seqtree
                     seqtree.add(key, node, partition)
         
+        assert len(counts) == family_count
+
         # Save seqtree
         seqtree_path = output_dir / f"{output_dir.name}.st"
         print(f"Saving seqtree to {seqtree_path}")
@@ -261,9 +267,10 @@ class Embedding(CLIApp, ABC):
 
             # Build memmap for gene family if it doesn't exist
             if not my_memmap_path.exists():
-                print("Building", my_memmap_path)
-                self.build_gene_array(marker_genes=marker_genes, family_index=family_index, output_dir=output_dir)
-                assert my_memmap_path.exists()
+                continue
+                # print("Building", my_memmap_path)
+                # self.build_gene_array(marker_genes=marker_genes, family_index=family_index, output_dir=output_dir)
+                # assert my_memmap_path.exists()
 
             my_memmap = read_memmap(my_memmap_path, family_count)
 
