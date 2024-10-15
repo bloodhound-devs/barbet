@@ -152,21 +152,33 @@ class AFEmbedding(Embedding):
 
     def test_class():
         af_runner = AlphafoldBatchRunner(**af_config)
-        models_embeddings = af_runner.run()
-        AFEmbedding.print_test_result(models_embeddings)    
+        af_out = af_runner.run()
+        models_embeddings = af_out['embeddings']
+        log_out = ""
+        if 'log' in af_out.keys():
+            print(f"Log out:\n{af_out['log']}")
+            log_out += f"Log out:\n{af_out['log']}"
+        em_out = AFEmbedding.print_test_result(models_embeddings)    
+        log_out += f"\n\nEmbeddings:\n{em_out}"
+        
+        with open('af_out.log', "w") as f:
+            f.write(log_out)
 
     def test():
         models_embeddings = run_batch_colabfold(af_config)
         AFEmbedding.print_test_result(models_embeddings)
 
     def print_test_result(models_embeddings):
+        res_str = ""
         comparison_embeddings = [models_embeddings[k] for k in models_embeddings]
         for k1 in models_embeddings:
             embeddings = models_embeddings[k1]['embeddings']
-            print(f"\nModel '{k1}'. Embeddings shape: {embeddings.shape}. Exec time: {models_embeddings[k1]['time']:.3f}s")
+            res_str += f"\nModel '{k1}'. Embeddings shape: {embeddings.shape}. Exec time: {models_embeddings[k1]['time']:.3f}s"
             for k2 in models_embeddings:
                 if k2 == k1: continue
                 distance = np.linalg.norm(embeddings - models_embeddings[k2]['embeddings'], axis=1)
                 similarity = np.mean(distance)
-                print(f"\t - {k1} ~ {k2} embedding similarity: {similarity}")
+                res_str += f"\n\t - {k1} ~ {k2} embedding similarity: {similarity}"
+        print(res_str)
+        return res_str
             

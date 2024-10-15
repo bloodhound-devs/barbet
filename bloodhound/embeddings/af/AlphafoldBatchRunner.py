@@ -196,6 +196,7 @@ class AlphafoldBatchRunner:
         feature_dict_callback: Callable[[Any], Any] = None,
         **kwargs
     ):
+        self.output = {'log': '', 'embeddings': {}}
         self.queries = queries
         self.result_dir = result_dir
         self.num_models = num_models
@@ -271,6 +272,10 @@ class AlphafoldBatchRunner:
             self.mk_hhsearch_db()
         
         self.first_job = True
+        
+    def log_out(self, txt="\n"):
+        self.output['log'] += f"\n{txt}"
+        logger.info(txt)
 
         
     def check_available_devices(self):     
@@ -279,18 +284,19 @@ class AlphafoldBatchRunner:
             # check if TPU is available
             import jax.tools.colab_tpu
             jax.tools.colab_tpu.setup_tpu()
-            logger.info('Running on TPU')
+            self.log_out('Running on TPU')
             DEVICE = "tpu"
             use_gpu_relax = False
         except:
             if jax.local_devices()[0].platform == 'cpu':
-                logger.info("WARNING: no GPU detected, will be using CPU")
+                self.log_out("WARNING: no GPU detected, will be using CPU")
                 DEVICE = "cpu"
                 use_gpu_relax = False
             else:
                 import tensorflow as tf
                 tf.get_logger().setLevel(logging.ERROR)
-                logger.info('Running on GPU')
+                self.log_out('Running on GPU')
+                self.output['log'] += f"\n'Running on GPU'"
                 DEVICE = "gpu"
                 # disable GPU on tensorflow
                 tf.config.set_visible_devices([], 'GPU')
@@ -460,7 +466,7 @@ class AlphafoldBatchRunner:
             if r not in cif_dict:
                 raise ValueError(f"mmCIF file {cif_file} is missing required field {r}.")
         if "_pdbx_audit_revision_history.revision_date" not in cif_dict:
-            logger.info(
+            self.log_out(
                 f"Adding missing field revision_date to {cif_file}. Backing up original file to {cif_file}.bak."
             )
             shutil.copy2(cif_file, str(cif_file) + ".bak")
@@ -733,7 +739,7 @@ class AlphafoldBatchRunner:
                     user_agent=self.user_agent,
                 )
             if template_paths is None:
-                logger.info("No template detected")
+                self.log_out("No template detected")
                 for index in range(0, len(query_seqs_unique)):
                     template_feature = self.mk_mock_template(query_seqs_unique[index])
                     template_features.append(template_feature)
@@ -747,14 +753,14 @@ class AlphafoldBatchRunner:
                         )
                         if len(template_feature["template_domain_names"]) == 0:
                             template_feature = self.mk_mock_template(query_seqs_unique[index])
-                            logger.info(f"Sequence {index} found no templates")
+                            self.log_out(f"Sequence {index} found no templates")
                         else:
-                            logger.info(
+                            self.log_out(
                                 f"Sequence {index} found templates: {template_feature['template_domain_names'].astype(str).tolist()}"
                             )
                     else:
                         template_feature = self.mk_mock_template(query_seqs_unique[index])
-                        logger.info(f"Sequence {index} found no templates")
+                        self.log_out(f"Sequence {index} found no templates")
 
                     template_features.append(template_feature)
         else:
@@ -977,6 +983,7 @@ class AlphafoldBatchRunner:
                 job_number += 1
             else:
                 jobname = safe_filename(raw_jobname)
+            self.log_out(f"Job '{jobname}' (job_n: {job_number}): {(raw_jobname, query_sequence, a3m_lines)}")
 
             #######################################
             # check if job has already finished
@@ -984,16 +991,16 @@ class AlphafoldBatchRunner:
             # In the colab version and with --zip we know we're done when a zip file has been written
             result_zip = self.result_dir.joinpath(jobname).with_suffix(".result.zip")
             if self.keep_existing_results and result_zip.is_file():
-                logger.info(f"Skipping {jobname} (result.zip)")
+                self.log_out(f"Skipping {jobname} (result.zip)")
                 continue
             # In the local version we use a marker file
             is_done_marker = self.result_dir.joinpath(jobname + ".done.txt")
             if self.keep_existing_results and is_done_marker.is_file():
-                logger.info(f"Skipping {jobname} (already done)")
+                self.log_out(f"Skipping {jobname} (already done)")
                 continue
 
             seq_len = len("".join(query_sequence))
-            logger.info(f"Query {job_number + 1}/{len(self.queries)}: {jobname} (length {seq_len})")
+            self.log_out(f"Query {job_number + 1}/{len(self.queries)}: {jobname} (length {seq_len})")
 
             ###########################################
             # generate MSA (a3m_lines) and templates
@@ -1003,21 +1010,24 @@ class AlphafoldBatchRunner:
                 if pickled_msa_and_templates.is_file():
                     with open(pickled_msa_and_templates, 'rb') as f:
                         (unpaired_msa, paired_msa, query_seqs_unique, query_seqs_cardinality, template_features) = pickle.load(f)
-                    logger.info(f"Loaded {pickled_msa_and_templates}")
-
+                    self.log_out(f"Loaded {pickled_msa_and_templates}")
                 else:
                     if a3m_lines is None:
+                        self.log_out(f"a3m_lines is None, getting msa (msa mode: {self.msa_mode}) and templates")
                         (unpaired_msa, paired_msa, query_seqs_unique, query_seqs_cardinality, template_features) = self.get_msa_and_templates(jobname, query_sequence, a3m_lines, self.msa_mode)
 
                     elif a3m_lines is not None:
+                        self.log_out(f"a3m_lines is NOT None, unserialising msa")
                         (unpaired_msa, paired_msa, query_seqs_unique, query_seqs_cardinality, template_features) = self.unserialize_msa(a3m_lines, query_sequence)
                         if self.use_templates:
+                            self.log_out(f"\tUsing templates")
                             (_, _, _, _, template_features) = self.get_msa_and_templates(jobname, query_seqs_unique, unpaired_msa, 'single_sequence')
 
                     if self.num_models == 0:
+                        self.log_out(f"num_models is 0")
                         with open(pickled_msa_and_templates, 'wb') as f:
                             pickle.dump((unpaired_msa, paired_msa, query_seqs_unique, query_seqs_cardinality, template_features), f)
-                        logger.info(f"Saved {pickled_msa_and_templates}")
+                        self.log_out(f"Saved {pickled_msa_and_templates}")
 
                 # save a3m
                 msa = self.msa_to_str(unpaired_msa, paired_msa, query_seqs_unique, query_seqs_cardinality)
@@ -1031,6 +1041,7 @@ class AlphafoldBatchRunner:
             # generate features
             #######################
             try:
+                self.log_out(f"Generating input feature:\n\t- query_seqs_unique: {query_seqs_unique}\n\t- query_seqs_cardinality: {query_seqs_cardinality}\n\t- unpaired_msa: {unpaired_msa}\n\t- paired_msa: {paired_msa}\n\t- template_features: {template_features}")
                 (feature_dict, domain_names) = self.generate_input_feature(query_seqs_unique, query_seqs_cardinality, unpaired_msa, paired_msa, template_features)
 
                 # to allow display of MSA info during colab/chimera run (thanks tomgoddard)
@@ -1041,19 +1052,24 @@ class AlphafoldBatchRunner:
                 continue
 
             if self.use_templates:
-                templates_file = self.result_dir.joinpath(f"{jobname}_template_domain_names.json")
+                t_file = f"{jobname}_template_domain_names.json"
+                self.log_out(f"Using template file: {t_file}")
+                templates_file = self.result_dir.joinpath(t_file)
                 templates_file.write_text(json.dumps(domain_names))
 
             ######################
             # predict structures
             ######################
             if self.num_models <= 0:
+                self.log_out(f"num_models <= 0")
                 logger.error(f"num_models <= 0")
                 return
                 
             try:
                 # get list of lengths
                 query_sequence_len_array = sum([[len(x)] * y for x,y in zip(query_seqs_unique, query_seqs_cardinality)],[])
+                self.log_out(f"query_sequence_len_array: {query_sequence_len_array}")
+                self.log_out(f"seq_len: {seq_len}, pad_len: {pad_len}")
 
                 # decide how much to pad (to avoid recompiling)
                 if seq_len > pad_len:
@@ -1065,6 +1081,8 @@ class AlphafoldBatchRunner:
 
                 # prep model and params
                 if self.first_job:
+                    self.log_out(f"FIRST JOB")
+                    self.log_out(f"Total queries: {len(self.queries)}, msa_mode: {self.msa_mode}")
                     # if one job input adjust max settings
                     if len(self.queries) == 1 and self.msa_mode != "single_sequence":
                         # get number of sequences
@@ -1076,9 +1094,10 @@ class AlphafoldBatchRunner:
                         if self.use_templates: num_seqs += 4
 
                         # adjust max settings
-                        max_seq = min(num_seqs, max_seq)
-                        max_extra_seq = max(min(num_seqs - max_seq, max_extra_seq), 1)
-                        logger.info(f"Setting max_seq={max_seq}, max_extra_seq={max_extra_seq}")
+                        self.max_seq = min(num_seqs, self.max_seq)
+                        self.max_extra_seq = max(min(num_seqs - self.max_seq, self.max_extra_seq), 1)
+                        self.log_out(f"Setting max_seq={self.max_seq}, max_extra_seq={self.max_extra_seq}")
+                    self.log_out(f"max_seq: {self.max_seq}, max_extra_seq: {self.max_extra_seq}")
 
                     model_runner_and_params = load_models_and_params(
                         num_models=self.num_models,
@@ -1101,7 +1120,7 @@ class AlphafoldBatchRunner:
                     )
                     self.first_job = False
 
-                models_embeddings = self.predict_structure(
+                self.output['embeddings'] = self.predict_structure(
                     prefix=jobname,
                     feature_dict=feature_dict,
                     sequences_lengths=query_sequence_len_array,
@@ -1113,8 +1132,8 @@ class AlphafoldBatchRunner:
                 logger.error(f"Could not predict {jobname}. Not Enough GPU memory? {e}")
                 continue
 
-        logger.info("Done")
-        return models_embeddings
+        self.log_out("Done")
+        return self.output
     
     
     
@@ -1167,7 +1186,7 @@ class AlphafoldBatchRunner:
         model_names = []
         files = FileManager(prefix, self.result_dir)
         seq_len = sum(sequences_lengths)
-        models_embeddings = {}
+        model_embeddings = {}
         
         # iterate through random seeds
         # Gabry: Technically this should always be one.
@@ -1192,7 +1211,7 @@ class AlphafoldBatchRunner:
                         input_features["asym_id"] = np.tile(feature_dict["asym_id"],r).reshape(r,-1)
                         if seq_len < pad_len:
                             input_features = self.pad_input(input_features, model_runner,model_name, pad_len, self.use_templates)
-                            logger.info(f"Padding length to {pad_len}")
+                            self.log_out(f"Padding length to {pad_len}")
 
                 tag = f"{self.model_type}_{model_name}_seed_{seed:03d}"
                 model_names.append(tag)
@@ -1207,7 +1226,7 @@ class AlphafoldBatchRunner:
                     for x,y in [["mean_plddt","pLDDT"],["ptm","pTM"],["iptm","ipTM"],["tol","tol"]]:
                         if x in result:
                             print_line += f" {y}={result[x]:.3g}"
-                    logger.info(f"{tag} recycle={recycles}{print_line}")
+                    self.log_out(f"{tag} recycle={recycles}{print_line}")
 
                     if self.save_recycles:
                         final_atom_mask = result["structure_module"]["final_atom_mask"]
@@ -1247,7 +1266,7 @@ class AlphafoldBatchRunner:
                         print_line += f" {y}={result[x]:.3g}"
                         conf[-1][x] = float(result[x])
                 conf[-1]["print_line"] = print_line
-                logger.info(f"{tag} took {prediction_times[-1]:.1f}s ({recycles} recycles)")
+                self.log_out(f"{tag} took {prediction_times[-1]:.1f}s ({recycles} recycles)")
 
                 # create protein object
                 final_atom_mask = result["structure_module"]["final_atom_mask"]
@@ -1263,9 +1282,9 @@ class AlphafoldBatchRunner:
                     self.prediction_callback(unrelaxed_protein, sequences_lengths,result, input_features, (tag, False))
 
                 embeddings = result["representations"]["single"]
-                models_embeddings[model_name] = {}
-                models_embeddings[model_name]['embeddings'] = embeddings
-                models_embeddings[model_name]['time'] = model_exec_time
+                model_embeddings[model_name] = {}
+                model_embeddings[model_name]['embeddings'] = embeddings
+                model_embeddings[model_name]['time'] = model_exec_time
                 
                 if self.save_single_representations:
                     np.save(files.get("single_repr","npy"), embeddings)           
@@ -1282,7 +1301,7 @@ class AlphafoldBatchRunner:
             if "multimer" not in self.model_type: del input_features
         if "multimer" in self.model_type: del input_features
 
-        return models_embeddings
+        return model_embeddings
 
 
 
