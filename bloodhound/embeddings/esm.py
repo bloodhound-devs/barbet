@@ -48,9 +48,9 @@ class ESMEmbedding(Embedding):
         layers:ESMLayers=typer.Option(..., help="The number of ESM layers to use."),
         hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
     ):
-        self.layers = layers
         if isinstance(layers, (str,int)):
             layers = ESMLayers.from_value(layers)
+        self.layers = layers
 
         assert layers is not None, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
         assert isinstance(layers, ESMLayers)

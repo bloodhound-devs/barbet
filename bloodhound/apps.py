@@ -27,7 +27,7 @@ from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
 from .data import read_memmap, RANKS, gene_id_from_accession
-from .embeddings.esm import ESMEmbedding, ESMLayers
+from .embeddings.esm import ESMEmbedding
 
 console = Console()
 
@@ -226,6 +226,7 @@ class Bloodhound(TorchApp):
         seqtree:str=None,
         in_memory:bool=False,
         prune:str="",
+        tip_alpha:float=None,
     ) -> None:
         if not seqtree:
             raise ValueError("seqtree is required")
@@ -236,6 +237,11 @@ class Bloodhound(TorchApp):
 
         print(f"Loading seqtree {seqtree}")
         self.seqtree = SeqTree.load(seqtree)
+
+        # Sets the loss weighting for the tips
+        if tip_alpha:
+            for tip in self.seqtree.classification_tree.leaves:
+                tip.parent.alpha = tip_alpha
 
         # prune classification tree if requested
         # if prune:
@@ -370,10 +376,14 @@ class Bloodhound(TorchApp):
         num_workers: int = 0,
     ) -> Iterable:
         # Get hyperparameters from checkpoint
-        embedding_model = module.hparams.embedding_model
+        if 'embedding_model' not in module.hparams.keys():
+            embedding_model = ESMEmbedding() # HACK
+            embedding_model.setup(layers=30, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
+        else:
+            embedding_model = module.hparams.embedding_model
         self.classification_tree = module.hparams.classification_tree
-        gene_id_dict = module.hparams.gene_id_dict
-        domain = "ar53" if len(gene_id_dict) == 53 else "bac120"
+        self.gene_id_dict = module.hparams.gene_id_dict
+        domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
 
         genomes = dict()
         sequence = Path(sequence)
@@ -403,6 +413,9 @@ class Bloodhound(TorchApp):
         embeddings = []
         self.gene_family_names = []
         for fasta in single_copy_fasta.rglob("*.fa"):
+            if fasta.stem not in self.gene_id_dict:
+                continue
+            
             # read the fasta file sequence remove the header
             seq = fasta.read_text().split("\n")[1]
             vector =  embedding_model(seq)
@@ -413,7 +426,7 @@ class Bloodhound(TorchApp):
                 self.gene_family_names.append(fasta.stem)
             del vector        
 
-        gene_family_ids = [gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
+        gene_family_ids = [self.gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
 
         # TODO Save the embeddings
 
