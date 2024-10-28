@@ -146,9 +146,9 @@ class Embedding(CLIApp, ABC):
         raise NotImplementedError
 
     def reduce(self, tensor:torch.Tensor) -> torch.Tensor:
-        if tensor.ndims == 2:
+        if tensor.ndim == 2:
             tensor = tensor.mean(dim=0)
-        assert tensor.ndims == 1
+        assert tensor.ndim == 1
         return tensor
 
     def __call__(self, seq:str) -> torch.Tensor:
@@ -174,14 +174,14 @@ class Embedding(CLIApp, ABC):
 
 
             interval_indexes = torch.arange(end-start)
-            distance_from_ends = torch.min( interval_indexes-start, end-interval_indexes  )
+            distance_from_ends = torch.min( interval_indexes-start, end-interval_indexes-1 )
             
-            weight = epsilon + distance_from_ends
+            weight = epsilon + torch.minimum(distance_from_ends, torch.tensor(self.overlap))
 
-            tensor[start:end] += weight * result
+            tensor[start:end] += result * weight.unsqueeze(1)
             weights[start:end] += weight
 
-        tensor = tensor/weight
+        tensor = tensor/weights.unsqueeze(1)
 
         return self.reduce(tensor)
     
