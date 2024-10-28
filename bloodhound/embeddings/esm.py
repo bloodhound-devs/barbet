@@ -92,7 +92,7 @@ class ESMEmbedding(Embedding):
         self.model = self.model.to(self.device)
 
     def embed(self, seq:str) -> torch.Tensor:
-        """ Takes a protein sequence as a string and returns an embedding vector. """
+        """ Takes a protein sequence as a string and returns an embedding tensor per residue. """
         layers = int(self.layers.value)
 
         if not self.model:
@@ -107,14 +107,11 @@ class ESMEmbedding(Embedding):
             results = self.model(batch_tokens, repr_layers=[layers], return_contacts=True)
         token_representations = results["representations"][layers]
 
-        # Generate per-sequence representations via averaging
-        # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
-        sequence_representations = []
-        for i, tokens_len in enumerate(batch_lens):
-            sequence_representations.append(token_representations[i, 1 : tokens_len - 1].mean(0))
+        assert batch_lens == 1
+        assert token_representations.size(0) == 1
 
-        vector = sequence_representations[0]
-        # if torch.isnan(vector).any():
-        #     return None
+        # Strip off the beginning-of-sequence and end-of-sequence tokens
+        embedding_tensor = token_representations[0, 1 : batch_lens[0] - 1]
+        assert len(seq) == len(embedding_tensor)
 
-        return vector        
+        return embedding_tensor

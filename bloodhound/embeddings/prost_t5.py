@@ -13,7 +13,7 @@ class ProstT5Embedding(Embedding):
         self.model.full() if self.device=='cpu' else self.model.half()
 
     def embed(self, seq:str) -> torch.Tensor:
-        """ Takes a protein sequence as a string and returns an embedding vector. """
+        """ Takes a protein sequence as a string and returns an embedding tensor per residue. """
         # add pre-fixes accordingly (this already expects 3Di-sequences to be lower-case)
         # if you go from AAs to 3Di (or if you want to embed AAs), you need to prepend "<AA2fold>"
         # if you go from 3Di to AAs (or if you want to embed 3Di), you need to prepend "<fold2AA>"
@@ -32,13 +32,5 @@ class ProstT5Embedding(Embedding):
 
         assert emb_0.shape[0] == len(seq)
 
-        # if you want to derive a single representation (per-protein embedding) for the whole protein
-        vector = emb_0.mean(dim=0) # shape (1024)
-
-        assert vector.shape == (1024,)
-
-        if torch.isnan(vector).any():
-            return None
-
-        return vector        
+        return emb_0
 
