@@ -140,6 +140,9 @@ class Embedding(CLIApp, ABC):
     max_length:int|None=None
     overlap:int=64
 
+    def __post_init__(self):
+        super().__init__()
+
     @abstractmethod
     def embed(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
@@ -218,8 +221,10 @@ class Embedding(CLIApp, ABC):
         family_index:int=typer.Option(default=..., help="The index for the gene family to use. E.g. if there are 120 gene families then this should be a number from 0 to 119."),
         output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
         flush_every:int=typer.Option(default=5_000, help="An interval to flush the memmap array as it is generated."),
+        max_length:int=None,
         **kwargs,
     ):
+        self.max_length = max_length
         self.setup(**kwargs)
 
         assert marker_genes is not None
@@ -264,14 +269,17 @@ class Embedding(CLIApp, ABC):
                     vector = self(seq)
                 except Exception as err:
                     print(f"{key} ({len(seq)}): {err}", file=error_file)
+                    print(f"{key} ({len(seq)}): {err}")
                     continue
 
                 if vector is None:
                     print(f"{key} ({len(seq)}): Embedding is None", file=error_file)
+                    print(f"{key} ({len(seq)}): Embedding is None")
                     continue
 
                 if torch.isnan(vector).any():
                     print(f"{key} ({len(seq)}): Embedding contains NaN", file=error_file)
+                    print(f"{key} ({len(seq)}): Embedding contains NaN")
                     continue
 
                 if memmap_wip_array is None:

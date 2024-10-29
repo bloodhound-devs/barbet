@@ -107,11 +107,11 @@ class ESMEmbedding(Embedding):
             results = self.model(batch_tokens, repr_layers=[layers], return_contacts=True)
         token_representations = results["representations"][layers]
 
-        assert batch_lens == 1
-        assert token_representations.size(0) == 1
+        assert len(batch_lens) == 1, f"More than one length found"
+        assert token_representations.size(0) == 1, f"More than one representation found"
 
         # Strip off the beginning-of-sequence and end-of-sequence tokens
         embedding_tensor = token_representations[0, 1 : batch_lens[0] - 1]
-        assert len(seq) == len(embedding_tensor)
+        assert len(seq) == len(embedding_tensor), f"Embedding representation incorrect length. should be {len(seq)} but is {len(embedding_tensor)}"
 
         return embedding_tensor
