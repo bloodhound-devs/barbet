@@ -162,16 +162,16 @@ class Embedding(CLIApp, ABC):
         
         epsilon = 0.1
         intervals = generate_overlapping_intervals(len(seq), self.max_length, self.overlap)
-        weights = torch.zeros( (len(seq),) )
+        weights = torch.zeros( (len(seq),), device="cpu" )
         tensor = None
         for start,end in intervals:
-            result = self.embed(seq[start:end])
+            result = self.embed(seq[start:end]).cpu()
 
             assert result.shape[0] == end-start
             embedding_size = result.shape[1]
 
             if tensor is None:
-                tensor = torch.zeros( (len(seq), embedding_size ))
+                tensor = torch.zeros( (len(seq), embedding_size ), device="cpu")
 
             assert tensor.shape[-1] == embedding_size
 
