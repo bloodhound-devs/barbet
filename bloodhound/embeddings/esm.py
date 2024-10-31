@@ -21,6 +21,12 @@ class ESMLayers(Enum):
             if layer.value == str(value):
                 return layer
         return None
+    
+    def __int__(self):
+        return int(self.value)
+    
+    def __str__(self):
+        return str(self.value)
 
     def model_name(self) -> str:
         match self:
@@ -48,12 +54,14 @@ class ESMEmbedding(Embedding):
         layers:ESMLayers=typer.Option(..., help="The number of ESM layers to use."),
         hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
     ):
-        if isinstance(layers, (str,int)):
-            layers = ESMLayers.from_value(layers)
-        self.layers = layers
+        if layers and not getattr(self, 'layers', None):
+            self.layers = layers
 
-        assert layers is not None, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
-        assert isinstance(layers, ESMLayers)
+        if isinstance(self.layers, (str,int)):
+            self.layers = ESMLayers.from_value(self.layers)
+        
+        assert self.layers is not None, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
+        assert isinstance(self.layers, ESMLayers)
 
         self.hub_dir = hub_dir
         if hub_dir:
@@ -64,6 +72,7 @@ class ESMEmbedding(Embedding):
         self.alphabet = None
 
     def __getstate__(self):
+        return dict(max_length=self.max_length, layers=str(self.layers))
         # Return a dictionary of attributes to be pickled
         state = self.__dict__.copy()
         # Remove the attribute that should not be pickled
@@ -78,12 +87,15 @@ class ESMEmbedding(Embedding):
         return state
 
     def __setstate__(self, state):
+        self.__init__()
+
         # Restore the object state from the unpickled state
         self.__dict__.update(state)
         self.model = None
         self.device = None
         self.batch_converter = None
         self.alphabet = None
+        self.hub_dir = None
 
     def load(self):
         self.model, self.alphabet = self.layers.get_model_alphabet()
