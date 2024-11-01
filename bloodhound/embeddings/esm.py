@@ -107,6 +107,10 @@ class ESMEmbedding(Embedding):
         """ Takes a protein sequence as a string and returns an embedding tensor per residue. """
         layers = int(self.layers.value)
 
+        # Handle ambiguous AAs
+        # https://github.com/facebookresearch/esm/issues/164
+        seq = seq.replace("J", "X")
+
         if not self.model:
             self.load()
 
