@@ -159,6 +159,7 @@ class BloodhoundDataModule(L.LightningDataModule):
     batch_size: int = 16
     num_workers: int = 0
     validation_partition:int = 0
+    test_partition:int = -1
 
     def __init__(
         self,
@@ -171,6 +172,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         batch_size: int = 16,
         num_workers: int = 0,
         validation_partition:int = 0,
+        test_partition:int=-1,
     ):
         super().__init__()
         self.array = array
@@ -180,6 +182,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.max_items = max_items
         self.batch_size = batch_size
         self.validation_partition = validation_partition
+        self.test_partition = test_partition
         self.num_workers = num_workers or min(os.cpu_count(), 8)
 
     def setup(self, stage=None):
@@ -190,6 +193,9 @@ class BloodhoundDataModule(L.LightningDataModule):
 
         for accession, details in self.seqtree.items():
             partition = details.partition
+            if partition == self.test_partition:
+                continue
+            
             dataset = self.validation if partition == self.validation_partition else self.training
             dataset.append( accession )
 
