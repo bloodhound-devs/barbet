@@ -195,7 +195,7 @@ class BloodhoundDataModule(L.LightningDataModule):
             partition = details.partition
             if partition == self.test_partition:
                 continue
-            
+
             dataset = self.validation if partition == self.validation_partition else self.training
             dataset.append( accession )
 
@@ -340,6 +340,8 @@ class Bloodhound(TorchApp):
         self,
         max_items:int=0,
         num_workers:int=0,
+        validation_partition:int=0,
+        test_partition:int=-1,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
             # seqbank=self.seqbank,
@@ -349,6 +351,8 @@ class Bloodhound(TorchApp):
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
             num_workers=num_workers,
+            validation_partition=validation_partition,
+            test_partition=test_partition,
         )
     
     @method
