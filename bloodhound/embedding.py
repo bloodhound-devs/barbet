@@ -215,6 +215,30 @@ class Embedding(CLIApp, ABC):
         return seqtree, accession_to_node
 
     @tool("setup")
+    def test_lengths(
+        self,
+        end:int=5_000,
+        start:int=1000,
+        retries:int=5,
+        **kwargs,
+    ):
+        def random_amino_acid_sequence(k):
+            amino_acids = "ACDEFGHIKLMNPQRSTVWY"  # standard 20 amino acids
+            return ''.join(random.choice(amino_acids) for _ in range(k))
+        
+        self.max_length = None
+        self.setup(**kwargs)
+        for ii in track(range(start,end)):
+            for _ in range(retries):
+                seq = random_amino_acid_sequence(ii)
+                try:
+                    self(seq)
+                except Exception as err:
+                    print(f"{ii}: {err}")
+                    return
+
+
+    @tool("setup")
     def build_gene_array(
         self,
         marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
