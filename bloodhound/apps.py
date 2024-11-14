@@ -27,7 +27,7 @@ from .modelsx import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
 from .data import read_memmap, RANKS, gene_id_from_accession
-from .embeddings.esm import ESMEmbedding
+from .embeddings.esm import ESMEmbedding, ESMLayers
 
 console = Console()
 
@@ -391,6 +391,7 @@ class Bloodhound(TorchApp):
             embedding_model.setup(layers=30, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
         else:
             embedding_model = module.hparams.embedding_model
+            embedding_model.layers = ESMLayers.from_value(embedding_model.layers)
         self.classification_tree = module.hparams.classification_tree
         self.gene_id_dict = module.hparams.gene_id_dict
         domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
