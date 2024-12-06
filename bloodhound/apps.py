@@ -356,13 +356,13 @@ class Bloodhound(TorchApp):
         )
     
     @method
-    def extra_hyperparameters(self, embedding_model:str="") -> dict:
+    def extra_hyperparameters(self, embedding_model:str="", max_length:int=None) -> dict:
         """ Extra hyperparameters to save with the module. """
         assert embedding_model, f"Please provide an embedding model."
         embedding_model = embedding_model.lower()
         if embedding_model.startswith("esm"):
             layers = embedding_model[3:].strip()
-            embedding_model = ESMEmbedding()
+            embedding_model = ESMEmbedding(max_length=max_length)
             embedding_model.setup(layers=layers)
         else:
             raise ValueError(f"Cannot understand embedding model: {embedding_model}")
@@ -384,14 +384,15 @@ class Bloodhound(TorchApp):
         cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
+        max_length:int = None,
     ) -> Iterable:
         # Get hyperparameters from checkpoint
-        if 'embedding_model' not in module.hparams.keys():
-            embedding_model = ESMEmbedding() # HACK
-            embedding_model.setup(layers=30, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
-        else:
-            embedding_model = module.hparams.embedding_model
-            embedding_model.layers = ESMLayers.from_value(embedding_model.layers)
+        assert 'embedding_model' in module.hparams.keys()
+        embedding_model = module.hparams.embedding_model
+        embedding_model.layers = ESMLayers.from_value(embedding_model.layers)
+        if max_length is not None:
+            embedding_model.max_length = max_length
+
         self.classification_tree = module.hparams.classification_tree
         self.gene_id_dict = module.hparams.gene_id_dict
         domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
