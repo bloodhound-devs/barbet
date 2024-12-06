@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=1
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 4:00:00
+#SBATCH -t 8:00:00
  
 #SBATCH --mem-per-cpu=120G
  
@@ -30,9 +30,9 @@ source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
-DOMAIN=$DOMAIN
+DOMAIN=bac120
 #DOMAIN=ar53
-LAYERS=12
+LAYERS=30
 
 bloodhound-esm preprocess \
     --taxonomy /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_taxonomy_r220.tsv \

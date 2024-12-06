@@ -1,19 +1,15 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=preprocess
+#SBATCH --job-name=bh-ar53
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --array=0-119%10
-#SBATCH --array=102,107-119%10
-
-# SBATCH --array=42
-# SBATCH --array=112,70,42,35,102,64,39,94%10
-# SBATCH --array=108
+#SBATCH --array=34,41%10
+# SBATCH --array=0-52%10
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 60:00:00
+#SBATCH -t 4:00:00
  
 #SBATCH --mem-per-cpu=12G
  
@@ -36,12 +32,24 @@ source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
-DOMAIN=bac120
-#DOMAIN=ar53
+
+DOMAIN=ar53
+
+
+#LAYERS=6
+#MAX_LENGTH=0
+
 #LAYERS=12
+#MAX_LENGTH=3049
+
 #LAYERS=30
+#MAX_LENGTH=2019
+
 LAYERS=33
 MAX_LENGTH=2019
+
+#LAYERS=36
+#LAYERS=48
 
 FAMILY_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 
@@ -49,12 +57,10 @@ bloodhound-esm build-gene-array \
     --layers $LAYERS \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS} \
-    --max-length $MAX_LENGTH \
     --hub-dir $TORCH_HOME \
-    --family-index $FAMILY_INDEX
+    --family-index $FAMILY_INDEX \
+    --max-length $MAX_LENGTH
 
 
-#bloodhound-esm preprocess \
-#    --taxonomy /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_taxonomy_r220.tsv \
-#    --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
-#    --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}
+
+

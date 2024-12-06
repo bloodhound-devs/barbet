@@ -17,7 +17,7 @@
 # SBATCH -p gpu-a100-short,gpu-a100,gpu-a100-preempt
 # SBATCH -p gpu-a100-short,gpu-a100
 # SBATCH -p gpu-a100-short
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --account=punim2199
  
 # Specify your email address to be notified of progress.
@@ -34,9 +34,10 @@ source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-DOMAIN=bac120
-#DOMAIN=ar53
-ESM_LAYERS=33
+#DOMAIN=bac120
+DOMAIN=ar53
+ESM_LAYERS=30
+ESM_LAYERS=6
 #FEATURES=2048
 FEATURES=768
 #FEATURES=1536
@@ -59,9 +60,12 @@ fi
 
 SEQTREE_NAME=esm${ESM_LAYERS}-reps.st
 SEQTREE_NAME=esm${ESM_LAYERS}.st
-#SEQTREE_NAME=esm${ESM_LAYERS}-reps-d4.st
+SEQTREE_NAME=esm${ESM_LAYERS}-reps.st
 SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
 
+EPOCHS=1
+LAYERS=0
+FEATURES=256
 
 bloodhound-tools train  \
         --memmap  $MEMMAP \
@@ -74,8 +78,8 @@ bloodhound-tools train  \
         --max-epochs $EPOCHS \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR}ep${EPOCHS}-gpu4 \
-        --num-workers 2 \
+        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR}ep${EPOCHS} \
+        --num-workers 4 \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 
 
@@ -83,3 +87,10 @@ bloodhound-tools train  \
 #        --profile-memory \
 
 #        --tip-alpha 2.0 \
+
+
+from torchapp.modules import *
+x = "logs/ar53-esm6-reps.st-b16f256l0g2e4lr0.0001ep1/version_3/checkpoints/checkpoint-epoch=00-valid_loss=7.7.ckpt"
+module = GeneralLightningModule.load_from_checkpoint(x)
+e = module.hparams['embedding_model']
+e.setup()
