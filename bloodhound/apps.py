@@ -173,6 +173,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         num_workers: int = 0,
         validation_partition:int = 0,
         test_partition:int=-1,
+        train_all:bool=False,
     ):
         super().__init__()
         self.array = array
@@ -184,6 +185,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.validation_partition = validation_partition
         self.test_partition = test_partition
         self.num_workers = num_workers or min(os.cpu_count(), 8)
+        self.train_all = train_all
 
     def setup(self, stage=None):
         # make assignments here (val/train/test split)
@@ -201,6 +203,9 @@ class BloodhoundDataModule(L.LightningDataModule):
 
             if self.max_items and len(self.training) >= self.max_items and len(self.validation) > 0:
                 break
+
+        if self.train_all:
+            self.training += self.validation
 
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
@@ -300,10 +305,42 @@ class Bloodhound(TorchApp):
     @method
     def model(
         self,
-        features:int=1024,
-        intermediate_layers:int=2,
-        growth_factor:float=2.0,
-        family_embedding_size:int=128,
+        features:int=Param(
+            default=1024,
+            help="The size of the initial layer after the embedding.",
+            tune=True,
+            log=True,
+            tune_min=256,
+            tune_max=4096,
+        ),
+        intermediate_layers:int=Param(
+            default=2,
+            help="The number of intermediate layers.",
+            tune=True,
+            tune_min=0,
+            tune_max=4,
+        ),
+        growth_factor:float=Param(
+            default=2.0,
+            help="The factor to multiply the initial layers.",
+            tune=True,
+            tune_min=1.0,
+            tune_max=3.0,
+        ),
+        family_embedding_size:int=Param(
+            default=128,
+            help="The size of the embeddings for the gene family.",
+            tune=True,
+            tune_min=0,
+            tune_max=256,
+        ),
+        dropout:float=Param(
+            default=0.0,
+            help="The amount of dropout.",
+            tune=True,
+            tune_min=0.0,
+            tune_max=0.8,
+        ),
     ) -> nn.Module:
         return BloodhoundModel(
             classification_tree=self.classification_tree,
@@ -312,6 +349,7 @@ class Bloodhound(TorchApp):
             growth_factor=growth_factor,
             family_embedding_size=family_embedding_size,
             gene_family_count=len(self.gene_id_dict),
+            dropout=dropout,
         )
     
     @method
