@@ -380,6 +380,7 @@ class Bloodhound(TorchApp):
         num_workers:int=0,
         validation_partition:int=0,
         test_partition:int=-1,
+        train_all:bool=False,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
             # seqbank=self.seqbank,
@@ -388,6 +389,7 @@ class Bloodhound(TorchApp):
             seqtree=self.seqtree,
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
+            train_all=train_all,
             num_workers=num_workers,
             validation_partition=validation_partition,
             test_partition=test_partition,
