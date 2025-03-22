@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
+python = ">=3.10,<3.13" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
 torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
 # hierarchicalsoftmax = "^1.1.0"
 hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
@@ -39,7 +39,7 @@ biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module 
 lightning = "^2.3.3"
 gtdbtk = "^2.4.0"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"
 coverage = "^5.5"

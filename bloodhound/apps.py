@@ -89,15 +89,12 @@ class Bloodhound(TorchApp):
         features:int=1024,
         intermediate_layers:int=2,
         growth_factor:float=2.0,
-        family_embedding_size:int=128,
     ) -> nn.Module:
         return BloodhoundModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
             growth_factor=growth_factor,
-            family_embedding_size=family_embedding_size,
-            gene_family_count=len(self.gene_id_dict),
         )
     
     @method
