@@ -41,7 +41,6 @@ def set_validation_rank_to_seqtree(
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
-    # assert len(accession) == len("RS_GCF_000006945.2")
     key = f"{accession}/{gene}"
     return key
 

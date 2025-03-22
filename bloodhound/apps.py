@@ -1,4 +1,3 @@
-import psutil
 import torch
 import numpy as np
 from pathlib import Path
@@ -6,221 +5,27 @@ from torch import nn
 import lightning as L
 from torchmetrics import Metric
 from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
-from corgi.seqtree import SeqTree, SeqDetail
-from seqbank import SeqBank
+from corgi.seqtree import SeqTree
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from rich.console import Console
-from torch.utils.data import Dataset
-from Bio import SeqIO
-from dataclasses import dataclass
-from hierarchicalsoftmax.metrics import greedy_accuracy
 from gtdbtk.markers import Markers
+from collections import defaultdict
 
 import pandas as pd
 import os
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from torchapp import Param, method, tool, TorchApp
-from .modelsx import BloodhoundModel
+from .models import BloodhoundModel
 from .gtdbtk import read_tophits, read_tigrfam, read_pfam
 from .embedding import get_key
-from .data import read_memmap, RANKS, gene_id_from_accession
+from .data import read_memmap, RANKS, BloodhoundDataModule, BloodhoundPredictionDataset
 from .embeddings.esm import ESMEmbedding, ESMLayers
 
 console = Console()
 
-
-
-@dataclass(kw_only=True)
-class BloodhoundDataset(Dataset):
-    accessions: list[str]
-    array:np.memmap|np.ndarray
-    gene_id_dict: dict[str, int]
-    accession_to_array_index:dict[str,int]|None=None
-
-    def __len__(self):
-        return len(self.accessions)
-
-    def __getitem__(self, idx):
-        accession = self.accessions[idx]
-        array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        embedding = torch.as_tensor(np.array(self.array[array_index,:], copy=False), dtype=torch.float16)
-        # embedding = torch.tensor(self.array[array_index,:], dtype=torch.float16)
-        gene_id = gene_id_from_accession(accession)
-        return embedding, self.gene_id_dict[gene_id]
-
-
-# @dataclass(kw_only=True)
-# class BloodhoundTrainingDataset(BloodhoundDataset):
-#     seqtree: SeqTree
-
-#     def __getitem__(self, idx):
-#         result = super()[idx]
-#         accession = self.accessions[idx]
-#         return *result, self.seqtree[accession].node_id
-
-
-@dataclass(kw_only=True)
-class BloodhoundTrainingDataset(Dataset):
-    accessions: list[str]
-    seqtree: SeqTree
-    array:np.memmap|np.ndarray
-    gene_id_dict: dict[str, int]
-    accession_to_array_index:dict[str,int]|None=None
-
-    def __post_init__(self):
-        print('BloodhoundTrainingDataset', hex(self.array.ctypes.data))
-
-    def __len__(self):
-        return len(self.accessions)
-
-    def __getitem__(self, idx):
-        accession = self.accessions[idx]
-        array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        # x = self.array[array_index,:]
-        # x = np.array(self.array[array_index,:], copy=False)
-
-
-        # x = self.array[array_index,:]
-        # # xx = np.array(x, copy=True)
-        # xxx = x.tolist()
-        # embedding = torch.from_numpy(xxx)
-        # # x = np.array(self.array[array_index,:], copy=False)
-        # # embedding = torch.tensor(x, dtype=torch.float16)
-        # del x
-        # del xxx
-
-        with torch.no_grad():
-            data = np.array(self.array[array_index, :], copy=False)
-            embedding = torch.tensor(data, dtype=torch.float16)
-            del data
-
-        # with torch.no_grad():
-        #     data_numpy0 = self.array[array_index,:]
-        #     data_numpy1 = np.array(data_numpy0, copy=False)
-        #     data_tensor = torch.as_tensor(data_numpy1, dtype=torch.float16)
-        #     embedding = data_tensor.detach().clone()
-        #     del data_tensor
-        #     del data_numpy1
-        #     del data_numpy0
-
-        # embedding = torch.zeros( (320,), dtype=torch.float16) # hack
-        # embedding = torch.zeros( (320,), dtype=torch.float32) # hack
-
-        # data = np.array(self.array[array_index,:], copy=False)
-        # tensor = torch.as_tensor(data, dtype=torch.float16)
-        # t = torch.from_numpy(data)
-        # with torch.no_grad():
-        #     array_index = 0
-        #     x = self.array[array_index,:]
-        #     data = np.array(x, copy=False)
-        #     x = data.mean()
-        #     # for i in range(320):
-        #     #     embedding[i] = float(data[i].item())
-        #     del data
-        #     del x
-        # del tensor
-        # # embedding = torch.tensor(x, dtype=torch.float16)
-
-        gene_id = gene_id_from_accession(accession)
-        seq_detail = self.seqtree[accession]
-        node_id = int(seq_detail.node_id)
-        del seq_detail
-        
-        # return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
-        return embedding, self.gene_id_dict[gene_id], node_id
-
-
-@dataclass(kw_only=True)
-class BloodhoundPredictionDataset(Dataset):
-    embeddings: list[torch.Tensor]
-    gene_family_ids: list[int]
-
-    def __post_init__(self):
-        assert len(self.embeddings) == len(self.gene_family_ids)
-
-    def __len__(self):
-        return len(self.gene_family_ids)
-
-    def __getitem__(self, idx):
-        return self.embeddings[idx], self.gene_family_ids[idx]
-    
-
-@dataclass
-class BloodhoundDataModule(L.LightningDataModule):
-    seqtree: SeqTree
-    # seqbank: SeqBank
-    array:np.memmap|np.ndarray
-    accession_to_array_index:dict[str,int]
-    gene_id_dict: dict[str,int]
-    max_items: int = 0
-    batch_size: int = 16
-    num_workers: int = 0
-    validation_partition:int = 0
-    test_partition:int = -1
-
-    def __init__(
-        self,
-        seqtree: SeqTree,
-        array:np.memmap|np.ndarray,
-        accession_to_array_index:dict[str,int],
-        # seqbank: SeqBank,
-        gene_id_dict: dict[str,int],
-        max_items: int = 0,
-        batch_size: int = 16,
-        num_workers: int = 0,
-        validation_partition:int = 0,
-        test_partition:int=-1,
-    ):
-        super().__init__()
-        self.array = array
-        self.accession_to_array_index = accession_to_array_index
-        self.seqtree = seqtree
-        self.gene_id_dict = gene_id_dict
-        self.max_items = max_items
-        self.batch_size = batch_size
-        self.validation_partition = validation_partition
-        self.test_partition = test_partition
-        self.num_workers = num_workers or min(os.cpu_count(), 8)
-
-    def setup(self, stage=None):
-        # make assignments here (val/train/test split)
-        # called on every process in DDP
-        self.training = []
-        self.validation = []
-
-        for accession, details in self.seqtree.items():
-            partition = details.partition
-            if partition == self.test_partition:
-                continue
-
-            dataset = self.validation if partition == self.validation_partition else self.training
-            dataset.append( accession )
-
-            if self.max_items and len(self.training) >= self.max_items and len(self.validation) > 0:
-                break
-
-        self.train_dataset = self.create_dataset(self.training)
-        self.val_dataset = self.create_dataset(self.validation)
-
-    def create_dataset(self, accessions:list[str]) -> BloodhoundTrainingDataset:
-        return BloodhoundTrainingDataset(
-            accessions=accessions, 
-            seqtree=self.seqtree, 
-            array=self.array,
-            accession_to_array_index=self.accession_to_array_index,
-            gene_id_dict=self.gene_id_dict,
-        )
-    
-    def train_dataloader(self):
-        print('train dataloader', self.num_workers)
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
-
-    def val_dataloader(self):
-        print('val_dataloader', self.num_workers)
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
 
 class Bloodhound(TorchApp):
@@ -231,7 +36,6 @@ class Bloodhound(TorchApp):
         memmap_index:str=None,
         seqtree:str=None,
         in_memory:bool=False,
-        prune:str="",
         tip_alpha:float=None,
     ) -> None:
         if not seqtree:
@@ -242,44 +46,26 @@ class Bloodhound(TorchApp):
             raise ValueError("memmap_index is required")        
 
         print(f"Loading seqtree {seqtree}")
-        self.seqtree = SeqTree.load(seqtree)
+        individual_seqtree = SeqTree.load(seqtree)
+        self.seqtree = SeqTree(classification_tree=individual_seqtree.classification_tree)
 
         # Sets the loss weighting for the tips
         if tip_alpha:
             for tip in self.seqtree.classification_tree.leaves:
                 tip.parent.alpha = tip_alpha
 
-        # prune classification tree if requested
-        # if prune:
-        #     assert prune in RANKS[:-1]
-        #     prune_rank_index = RANKS.index(prune) + 1
-        #     for key, node_detail in self.seqtree.items():
-        #         node = self.seqtree.node(key)
-        #         ancestors = node.ancestors
-        #         if len(ancestors) > prune_rank_index:
-        #             new_node = node.ancestors[prune_rank_index]
-        #             self.seqtree[key] = SeqDetail(new_node, node_detail.partition)
-            
-        #     # remove children of genus nodes
-        #     for node in self.seqtree.classification_tree.pre_order_iter():
-        #         self.readonly = False
-        #         if len(node.ancestors) == prune_rank_index:
-        #             node.children = []
-
-        #     self.seqtree.set_indexes()
-        #     RANKS = RANKS[:-1]# hack
-
-
-        # assert seqbank is not None
-        # print(f"Loading seqbank {seqbank}")
-        # self.seqbank = SeqBank(seqbank)
         print(f"Loading memmap")
-        dtype = "float16"
-        self.accession_to_array_index = dict()
+        self.accession_to_array_index = defaultdict(list)
         with open(memmap_index) as f:
-            for i, accession in enumerate(f):
-                self.accession_to_array_index[accession.strip()] = i
-        count = len(self.accession_to_array_index)
+            for key_index, key in enumerate(f):
+                key = key.strip()
+                accession = key.strip().split("/")[0]
+
+                if len(self.accession_to_array_index[accession]) == 0:
+                    self.seqtree[key] = self.individual_seqtree[key]
+
+                self.accession_to_array_index[accession].append(key_index)
+        count = key_index + 1
         self.array = read_memmap(memmap, count)
 
         # If there's enough memory, then read into RAM
@@ -344,7 +130,6 @@ class Bloodhound(TorchApp):
         test_partition:int=-1,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
-            # seqbank=self.seqbank,
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
             seqtree=self.seqtree,
