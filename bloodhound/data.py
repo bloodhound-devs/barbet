@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
-from Bio import SeqIO
+import lightning as L
 from dataclasses import dataclass
 from corgi.seqtree import SeqTree
 

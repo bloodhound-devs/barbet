@@ -62,7 +62,7 @@ class Bloodhound(TorchApp):
                 accession = key.strip().split("/")[0]
 
                 if len(self.accession_to_array_index[accession]) == 0:
-                    self.seqtree[key] = self.individual_seqtree[key]
+                    self.seqtree[key] = individual_seqtree[key]
 
                 self.accession_to_array_index[accession].append(key_index)
         count = key_index + 1
@@ -97,9 +97,9 @@ class Bloodhound(TorchApp):
             growth_factor=growth_factor,
         )
     
-    @method
-    def input_count(self) -> int:
-        return 2
+    # @method
+    # def input_count(self) -> int:
+    #     return 1
             
     @method
     def loss_function(self):
