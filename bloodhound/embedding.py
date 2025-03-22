@@ -175,7 +175,6 @@ class Embedding(CLIApp, ABC):
 
             assert tensor.shape[-1] == embedding_size
 
-
             interval_indexes = torch.arange(end-start)
             distance_from_ends = torch.min( interval_indexes-start, end-interval_indexes-1 )
             
