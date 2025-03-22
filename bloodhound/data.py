@@ -56,6 +56,7 @@ class BloodhoundTrainingDataset(Dataset):
         accession = self.accessions[idx]
         array_indices = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
 
+        assert len(array_indices) > 0, f"Accession {accession} has no array indices"
         with torch.no_grad():
             data = np.array(self.array[array_indices, :], copy=False)
             embedding = torch.tensor(data, dtype=torch.float16)
@@ -106,7 +107,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         gene_id_dict: dict[str,int],
         max_items: int = 0,
         batch_size: int = 16,
-        num_workers: int = 0,
+        num_workers: int = None,
         validation_partition:int = 0,
         test_partition:int=-1,
     ):
@@ -119,7 +120,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.validation_partition = validation_partition
         self.test_partition = test_partition
-        self.num_workers = num_workers or min(os.cpu_count(), 8)
+        self.num_workers = min(os.cpu_count(), 8) if num_workers is None else num_workers
 
     def setup(self, stage=None):
         # make assignments here (val/train/test split)

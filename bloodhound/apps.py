@@ -62,7 +62,7 @@ class Bloodhound(TorchApp):
                 accession = key.strip().split("/")[0]
 
                 if len(self.accession_to_array_index[accession]) == 0:
-                    self.seqtree[key] = individual_seqtree[key]
+                    self.seqtree[accession] = individual_seqtree[key]
 
                 self.accession_to_array_index[accession].append(key_index)
         count = key_index + 1
@@ -124,6 +124,7 @@ class Bloodhound(TorchApp):
         max_items:int=0,
         num_workers:int=0,
         validation_partition:int=0,
+        batch_size:int = 1,
         test_partition:int=-1,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
@@ -132,6 +133,7 @@ class Bloodhound(TorchApp):
             seqtree=self.seqtree,
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
+            batch_size=batch_size,
             num_workers=num_workers,
             validation_partition=validation_partition,
             test_partition=test_partition,
