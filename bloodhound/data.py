@@ -1,3 +1,4 @@
+import random
 import os
 import numpy as np
 import torch
@@ -21,6 +22,16 @@ def read_memmap(path, count, dtype:str="float16") -> np.memmap:
 
 def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
+
+
+def choose_k_from_n(lst, k) -> list:
+    n = len(lst)
+    if n == 0:
+        return []
+    repetitions = k // n
+    remainder = k % n
+    result = lst * repetitions + random.sample(lst, remainder)
+    return result
 
 
 @dataclass(kw_only=True)
@@ -48,6 +59,7 @@ class BloodhoundTrainingDataset(Dataset):
     array:np.memmap|np.ndarray
     gene_id_dict: dict[str, int]
     accession_to_array_index:dict[str,int]|None=None
+    seq_count:int = 0
 
     def __len__(self):
         return len(self.accessions)
@@ -55,6 +67,8 @@ class BloodhoundTrainingDataset(Dataset):
     def __getitem__(self, idx):
         accession = self.accessions[idx]
         array_indices = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
+        if self.seq_count:
+            array_indices = choose_k_from_n(array_indices, self.seq_count)
 
         assert len(array_indices) > 0, f"Accession {accession} has no array indices"
         with torch.no_grad():
@@ -110,6 +124,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         num_workers: int = None,
         validation_partition:int = 0,
         test_partition:int=-1,
+        seq_count:int=0,
     ):
         super().__init__()
         self.array = array
@@ -121,6 +136,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.validation_partition = validation_partition
         self.test_partition = test_partition
         self.num_workers = min(os.cpu_count(), 8) if num_workers is None else num_workers
+        self.seq_count = seq_count
 
     def setup(self, stage=None):
         # make assignments here (val/train/test split)
@@ -149,6 +165,7 @@ class BloodhoundDataModule(L.LightningDataModule):
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
             gene_id_dict=self.gene_id_dict,
+            seq_count=self.seq_count,
         )
     
     def train_dataloader(self):
@@ -156,3 +173,4 @@ class BloodhoundDataModule(L.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+

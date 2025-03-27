@@ -10,7 +10,7 @@ class BloodhoundModel(nn.Module):
         features:int=5120, 
         intermediate_layers:int=0, 
         growth_factor:float=2.0,
-        attention_hidden_size:int=512,
+        attention_size:int=512,
         dropout:float=0.0,
     ):
         super().__init__()
@@ -27,9 +27,9 @@ class BloodhoundModel(nn.Module):
         self.sequential = nn.Sequential(*modules)
 
         self.attention_layer = nn.Sequential(
-            nn.Linear(out_features, attention_hidden_size),  # (batch_size, seq_length, hidden_size)
-            nn.Tanh(),
-            nn.Linear(attention_hidden_size, 1)  # (batch_size, seq_length, 1)
+            nn.Linear(out_features, attention_size),  # (batch_size, seq_length, hidden_size)
+            nn.PReLU(),
+            nn.Linear(attention_size, 1)  # (batch_size, seq_length, 1)
         )
 
         self.classifier = HierarchicalSoftmaxLazyLinear(root=classification_tree)

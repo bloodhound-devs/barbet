@@ -89,12 +89,14 @@ class Bloodhound(TorchApp):
         features:int=1024,
         intermediate_layers:int=2,
         growth_factor:float=2.0,
+        attention_size:int=512,
     ) -> nn.Module:
         return BloodhoundModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
             growth_factor=growth_factor,
+            attention_size=attention_size,
         )
     
     # @method
@@ -126,6 +128,7 @@ class Bloodhound(TorchApp):
         validation_partition:int=0,
         batch_size:int = 1,
         test_partition:int=-1,
+        seq_count:int=0,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
             array=self.array,
@@ -137,6 +140,7 @@ class Bloodhound(TorchApp):
             num_workers=num_workers,
             validation_partition=validation_partition,
             test_partition=test_partition,
+            seq_count=seq_count,
         )
     
     @method
