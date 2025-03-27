@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from abc import ABC, abstractmethod
 from Bio import SeqIO
@@ -266,13 +267,14 @@ class Embedding(CLIApp, ABC):
         print(f"Loading {marker_genes} file.")
         with tarfile.open(marker_genes, "r:gz") as tar, open(error, "w") as error_file, open(accessions_wip, "w") as accessions_wip_file:
             members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
+            prefix_length = len(os.path.commonprefix([Path(member.name).with_suffix("").name for member in members]))
             
             member = members[family_index]
             print(f"Processing file {family_index} in {marker_genes}")
 
 
             f = tar.extractfile(member)
-            marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
+            marker_id = Path(member.name).with_suffix("").name[prefix_length:]
 
             fasta_io = StringIO(f.read().decode('ascii'))
 
