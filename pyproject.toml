@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "Bloodhound"
-version = "0.1.0"
+version = "0.1.1"
 description = "Geometric Analysis of MicroBIal Taxonomies"
 authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
 license = "Apache-2.0"
