@@ -112,6 +112,7 @@ class BloodhoundDataModule(L.LightningDataModule):
     num_workers: int = 0
     validation_partition:int = 0
     test_partition:int = -1
+    train_all:bool = False
 
     def __init__(
         self,
@@ -125,6 +126,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         validation_partition:int = 0,
         test_partition:int=-1,
         seq_count:int=0,
+        train_all:bool=False,
     ):
         super().__init__()
         self.array = array
@@ -137,6 +139,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.test_partition = test_partition
         self.num_workers = min(os.cpu_count(), 8) if num_workers is None else num_workers
         self.seq_count = seq_count
+        self.train_all = train_all
 
     def setup(self, stage=None):
         # make assignments here (val/train/test split)
@@ -154,6 +157,9 @@ class BloodhoundDataModule(L.LightningDataModule):
 
             if self.max_items and len(self.training) >= self.max_items and len(self.validation) > 0:
                 break
+
+        if self.train_all:
+            self.training += self.validation
 
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)

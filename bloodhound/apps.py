@@ -129,6 +129,7 @@ class Bloodhound(TorchApp):
         batch_size:int = 1,
         test_partition:int=-1,
         seq_count:int=0,
+        train_all:bool = False,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(
             array=self.array,
