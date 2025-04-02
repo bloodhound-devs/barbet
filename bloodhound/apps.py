@@ -230,7 +230,6 @@ class Bloodhound(TorchApp):
 
         # TODO Save the embeddings
 
-
         dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_ids=gene_family_ids)
         dataloader =  DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 

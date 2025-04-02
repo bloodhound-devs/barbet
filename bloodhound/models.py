@@ -12,6 +12,7 @@ class BloodhoundModel(nn.Module):
         growth_factor:float=2.0,
         attention_size:int=512,
         dropout:float=0.0,
+        return_attention:bool=False,
     ):
         super().__init__()
 
@@ -34,6 +35,7 @@ class BloodhoundModel(nn.Module):
 
         self.classifier = HierarchicalSoftmaxLazyLinear(root=classification_tree)
         self.model_dtype = next(self.sequential.parameters()).dtype
+        self.return_attention = return_attention
 
     def forward(self, x):        
         if self.model_dtype != x.dtype:
@@ -48,4 +50,7 @@ class BloodhoundModel(nn.Module):
 
         result = self.classifier(context_vector)
 
+        if self.return_attention:
+            return result, attention_scores
+            
         return result
