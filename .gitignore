@@ -169,3 +169,5 @@ cython_debug/
 lightning_logs/
 logs/
 robdemo.sh
+
+MAG-GUT840.*

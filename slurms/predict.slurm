@@ -26,16 +26,19 @@ module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
 
+
 module load prodigal/2.6.3
 module load GCC/11.3.0
 module load OpenMPI/4.1.4
 module load HMMER/3.3.2
 module load Graphviz/5.0.0
 
-source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
+source /data/gpfs/projects/punim2199/rob/bloodhound-stack/.venv/bin/activate
 
-export HF_HOME=/data/gpfs/projects/punim2199/huggingface
+export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
+export HF_HOME=/home/rturnbull/wytamma/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
+
 
 DOMAIN=bac120
 #DOMAIN=ar53
@@ -71,3 +74,14 @@ bloodhound \
     --output-csv outputs-GCA_001027105.1/GCA_001027105.1.csv \
     --output-gene-csv outputs-GCA_001027105.1/GCA_001027105.1-gene.csv \
     --output-averaged-csv outputs-GCA_001027105.1/GCA_001027105.1-averaged.csv
+
+
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/bac120-stack-esm33.st-b4f1536l2g2lr0.0002ep70a512s32val0/version_0/checkpoints/weights-epoch=57-valid_loss=1.1.ckpt
+bloodhound  \
+    --checkpoint $CHECKPOINT \
+    --input MAG-GUT840.fa.gz \
+    --out-dir outputs/ \
+    --memmap-array MAG-GUT840.npy \
+    --memmap-index MAG-GUT840.idx \
+    --gtdbtk-data 
+    --torch-hub $TORCH_HOME 

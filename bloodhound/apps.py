@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from rich.console import Console
 from gtdbtk.markers import Markers
 from collections import defaultdict
+from rich.progress import track
 
 import pandas as pd
 import os
@@ -167,102 +168,114 @@ class Bloodhound(TorchApp):
     def prediction_dataloader(
         self,
         module,
-        sequence:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
+        input:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
         out_dir:Path=Param(help="A path to the output directory."),
-        gtdbtk_data:Path=Param(help="The path to the GTDBTK data directory", env="GTDBTK_DATA_PATH"),
-        torch_hub:Path=Param(help="The path to the Torch Hub directory", env="TORCH_HOME"),
-        memmap_array_path:Path=None, # TODO explain
+        gtdbtk_data:Path=Param(help="The path to the GTDBTK data directory", envvar="GTDBTK_DATA_PATH"),
+        torch_hub:Path=Param(help="The path to the Torch Hub directory", envvar="TORCH_HOME"),
+        memmap_array:Path=None, # TODO explain
         memmap_index:Path=None, # TODO explain
         extension='fa',
         prefix:str="gtdbtk",
         cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
-        repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction.")
-    ) -> Iterable:
+        force_embed:bool=False,
+        repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
+        **kwargs,
+    ) -> Iterable:        
         # Get hyperparameters from checkpoint
-        if 'embedding_model' not in module.hparams.keys():
-            embedding_model = ESMEmbedding() # HACK
-            embedding_model.setup(layers=30, hub_dir="/data/gpfs/projects/punim2199/torch-hub")
-        else:
-            embedding_model = module.hparams.embedding_model
-            embedding_model.layers = ESMLayers.from_value(embedding_model.layers)
-
+        # esm_layers = ESMLayers.from_value(module.hparams.get('esm_layers', module.hparams.embedding_model.layers))
+        # embedding_model = module.hparams.embedding_model
+        # embedding_model.setup(layers = esm_layers, hub_dir=torch_hub) # HACK
+        # breakpoint()
+        
         seq_count = module.hparams.get('seq_count', 32)
-
         self.classification_tree = module.hparams.classification_tree
-        domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
-
-        ####################
-        # GTDBTK Setup
-        ####################
         genomes = dict()
-        sequence = Path(sequence)
-        if sequence.is_dir():
-            for path in sequence.rglob(f"*.{extension}"):
+        input = Path(input)
+        if input.is_dir():
+            for path in input.rglob(f"*.{extension}"):
                 genomes[path.stem] = str(path)
         else:
-            genomes[sequence.stem] = str(sequence)
+            genomes[input.stem] = str(input)
 
-        self.name = sequence.name
-    
-        assert gtdbtk_data is not None, f"Please give the path to the GTDBTK data directory."
-        assert Path(gtdbtk_data).is_dir()
-        os.environ["GTDBTK_DATA_PATH"] = str(gtdbtk_data)
+        self.name = input.name
 
-        markers = Markers(cpus)
-        markers.identify(
-            genomes,
-            tln_tables=dict(),
-            out_dir=out_dir,
-            prefix=prefix,
-            force=False,
-            genes=False,
-            write_single_copy_genes=True,
-        )
-    
-        single_copy_fasta = out_dir / "identify/intermediate_results/single_copy_fasta"/domain
 
-        ###############
-        # Set directory for Memmap Array
-        ###############
-        if not memmap_array_path:
-            # get temporary directory
-            import tempfile
-            
-            self.temp_dir = Path(tempfile.mkdtemp())
-            print(f"Using temporary directory {self.temp_dir} to store the memmap array with embeddings")
-            memmap_array_path = self.temp_dir / "embeddings.npy"
-            memmap_index = self.temp_dir / "embeddings.txt"
+        memmap_array_path = memmap_array
+        if memmap_array_path and memmap_array_path.exists() and memmap_index and memmap_index.exists() and not force_embed:
+            print(f"Loading memmap")
+            accessions = memmap_index.read_text().strip().split("\n")
+            embeddings = read_memmap(memmap_array_path, len(accessions))
+        else:
+            # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
+            domain = "bac120"
 
-    
-        #######################
-        # Create Embeddings
-        #######################
-        embeddings = []
-        accessions = []
-        assert len(genomes) == 1 # hack for now
-        genome = list(genomes.keys())[0]
-        for fasta in single_copy_fasta.rglob("*.fa"):
-            # read the fasta file sequence remove the header
-            seq = fasta.read_text().split("\n")[1]
-            vector =  embedding_model(seq)
-            if vector is not None and not torch.isnan(vector).any():
-                vector = vector.cpu().detach().clone().numpy()
-                embeddings.append(vector)
+            ####################
+            # GTDBTK Setup
+            ####################
+        
+            assert gtdbtk_data is not None, f"Please give the path to the GTDBTK data directory."
+            assert Path(gtdbtk_data).is_dir()
+            os.environ["GTDBTK_DATA_PATH"] = str(gtdbtk_data)
 
-                gene_family_id = fasta.stem
-                accession = f"{genome}/{gene_family_id}"
-                accessions.append(accession)
+            markers = Markers(cpus)
+            markers.identify(
+                genomes,
+                tln_tables=dict(),
+                out_dir=out_dir,
+                prefix=prefix,
+                force=False,
+                genes=False,
+                write_single_copy_genes=True,
+            )
+        
+            single_copy_fasta = out_dir / "identify/intermediate_results/single_copy_fasta"/domain
 
-            del vector        
+            ###############
+            # Set directory for Memmap Array
+            ###############
+            # if not memmap_array_path:
+            #     # get temporary directory
+            #     import tempfile
+                
+            #     self.temp_dir = Path(tempfile.mkdtemp())
+            #     print(f"Using temporary directory {self.temp_dir} to store the memmap array with embeddings")
+            #     memmap_array_path = self.temp_dir / "embeddings.npy"
+            #     memmap_index = self.temp_dir / "embeddings.txt"
 
-        embeddings = np.as_array(embeddings)
-        memmap_array = np.memmap(memmap_array_path, dtype=dtype, mode='w+', shape=embeddings.shape)
-        memmap_array[:] = embeddings[:,:]
-        memmap_array.flush()
+        
+            #######################
+            # Create Embeddings
+            #######################
+            embeddings = []
+            accessions = []
+            assert len(genomes) == 1 # hack for now
+            genome = list(genomes.keys())[0]
+            fastas = list(single_copy_fasta.rglob("*.fa"))
+            for fasta in track(fastas):
+                # read the fasta file sequence remove the header
+                seq = fasta.read_text().split("\n")[1]
+                vector = module.hparams.embedding_model(seq)
+                if vector is not None and not torch.isnan(vector).any():
+                    vector = vector.cpu().detach().clone().numpy()
+                    embeddings.append(vector)
 
-        memmap_index.write_text("\n".join(accessions))
+                    gene_family_id = fasta.stem
+                    accession = f"{genome}/{gene_family_id}"
+                    accessions.append(accession)
+
+                del vector        
+
+            embeddings = np.asarray(embeddings).astype(np.float16)
+            if memmap_array_path is not None and memmap_index is not None:
+                memmap_array_path.parent.mkdir(exist_ok=True, parents=True)
+                memmap_array = np.memmap(memmap_array_path, dtype=embeddings.dtype, mode='w+', shape=embeddings.shape)
+                memmap_array[:] = embeddings[:,:]
+                memmap_array.flush()
+                
+                memmap_index.parent.mkdir(exist_ok=True, parents=True)
+                memmap_index.write_text("\n".join(accessions))
 
         # Copy memmap for gene family into output memmap
         self.prediction_dataset = BloodhoundPredictionDataset(
@@ -272,7 +285,7 @@ class Bloodhound(TorchApp):
             repeats=repeats,
             seed=42,
         )
-        dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        dataloader = DataLoader(self.prediction_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
         return dataloader
 
@@ -379,7 +392,7 @@ class Bloodhound(TorchApp):
         if output_gene_csv or output_gene_tips_csv or gene_images:
             self.output_results_to_df(
                 self.gene_family_names,
-                gene_results,
+                results,
                 output_gene_csv,
                 output_gene_tips_csv,
                 image_dir if gene_images else None,
@@ -388,8 +401,8 @@ class Bloodhound(TorchApp):
             )
 
         result = self.output_results_to_df(
-            [self.name+"-summed"],
-            gene_results.sum(axis=0, keepdims=True),
+            [self.name],
+            results.mean(axis=0, keepdims=True),
             output_csv,
             output_tips_csv,
             image_dir,
@@ -397,16 +410,16 @@ class Bloodhound(TorchApp):
             prediction_threshold=prediction_threshold,
         )
 
-        if output_averaged_csv or output_averaged_tips_csv:
-            self.output_results_to_df(
-                [self.name+"-averaged"],
-                gene_results.mean(axis=0, keepdims=True),
-                output_averaged_csv,
-                output_averaged_tips_csv,
-                image_dir,
-                image_threshold=image_threshold,
-                prediction_threshold=prediction_threshold,
-            )
+        # if output_averaged_csv or output_averaged_tips_csv:
+        #     self.output_results_to_df(
+        #         [self.name+"-averaged"],
+        #         results.mean(axis=0, keepdims=True),
+        #         output_averaged_csv,
+        #         output_averaged_tips_csv,
+        #         image_dir,
+        #         image_threshold=image_threshold,
+        #         prediction_threshold=prediction_threshold,
+        #     )
 
         return result
 

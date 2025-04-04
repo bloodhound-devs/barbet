@@ -1,6 +1,7 @@
 import random
 import os
 import numpy as np
+from collections import defaultdict
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -37,7 +38,7 @@ def choose_k_from_n(lst, k) -> list[int]:
 @dataclass(kw_only=True)
 class BloodhoundStack():
     species:str
-    array_indices:nd.array
+    array_indices:np.array
 
 
 @dataclass(kw_only=True)
@@ -51,7 +52,7 @@ class BloodhoundPredictionDataset(Dataset):
 
     def __post_init__(self):
         species_to_array_indices = defaultdict(set)
-        for index, accession in enumerate(accessions):
+        for index, accession in enumerate(self.accessions):
             slash_position = accession.rfind("/")
             assert slash_position != -1
             species = accession[:slash_position]
@@ -59,7 +60,7 @@ class BloodhoundPredictionDataset(Dataset):
 
         # Build stacks
         random.seed(self.seed)
-        stacks = []
+        self.stacks = []
         for species, species_array_indices in species_to_array_indices.items():
             stack_indices = []
             remainder = []
@@ -89,7 +90,7 @@ class BloodhoundPredictionDataset(Dataset):
                     remainder = remainder[self.seq_count:]
                             
             stack = BloodhoundStack(species=species, array_indices=stack_indices)
-            stacks.append(stack)
+            self.stacks.append(stack)
 
     def __len__(self):
         return len(self.stacks)
@@ -140,19 +141,19 @@ class BloodhoundTrainingDataset(Dataset):
         return embedding, node_id
 
 
-@dataclass(kw_only=True)
-class BloodhoundPredictionDataset(Dataset):
-    embeddings: list[torch.Tensor]
-    gene_family_ids: list[int]
+# @dataclass(kw_only=True)
+# class BloodhoundPredictionDataset(Dataset):
+#     embeddings: list[torch.Tensor]
+#     gene_family_ids: list[int]
 
-    def __post_init__(self):
-        assert len(self.embeddings) == len(self.gene_family_ids)
+#     def __post_init__(self):
+#         assert len(self.embeddings) == len(self.gene_family_ids)
 
-    def __len__(self):
-        return len(self.gene_family_ids)
+#     def __len__(self):
+#         return len(self.gene_family_ids)
 
-    def __getitem__(self, idx):
-        return self.embeddings[idx] #, self.gene_family_ids[idx]
+#     def __getitem__(self, idx):
+#         return self.embeddings[idx] #, self.gene_family_ids[idx]
     
 
 @dataclass
