@@ -13,7 +13,7 @@
 #SBATCH --mem-per-cpu=64G
  
 # SBATCH -p cascade
-#SBATCH -p gpu-h100,gpu-a100,gpu-a100-short
+#SBATCH -p gpu-h100
 # SBATCH -p gpu-a100-short,gpu-a100,gpu-a100-preempt
 # SBATCH -p gpu-a100-short,gpu-a100
 # SBATCH -p gpu-a100-short
@@ -36,9 +36,10 @@ export HF_HOME=/home/rturnbull/wytamma/huggingface
 
 DOMAIN=bac120
 #DOMAIN=ar53
-ESM_LAYERS=33
+ESM_LAYERS=12
 #ESM_LAYERS=6
 #FEATURES=2048
+#FEATURES=768
 #FEATURES=768
 FEATURES=1536
 #FEATURES=256
@@ -80,7 +81,7 @@ bloodhound-tools train  \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-stack-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${SEQ_COUNT} \
+        --run-name  ${DOMAIN}-stack-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${SEQ_COUNT}prod \
         --num-workers 4 \
         --train-all \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \

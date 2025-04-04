@@ -142,6 +142,7 @@ class Bloodhound(TorchApp):
             validation_partition=validation_partition,
             test_partition=test_partition,
             seq_count=seq_count,
+            train_all=train_all,
         )
     
     @method
