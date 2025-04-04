@@ -169,11 +169,16 @@ class Bloodhound(TorchApp):
         module,
         sequence:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
         out_dir:Path=Param(help="A path to the output directory."),
+        gtdbtk_data:Path=Param(help="The path to the GTDBTK data directory", env="GTDBTK_DATA_PATH"),
+        torch_hub:Path=Param(help="The path to the Torch Hub directory", env="TORCH_HOME"),
+        memmap_array_path:Path=None, # TODO explain
+        memmap_index:Path=None, # TODO explain
         extension='fa',
-        prefix="gtdbtk",
+        prefix:str="gtdbtk",
         cpus:int=1,
         batch_size:int = 64,
         num_workers: int = 0,
+        repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction.")
     ) -> Iterable:
         # Get hyperparameters from checkpoint
         if 'embedding_model' not in module.hparams.keys():
@@ -182,10 +187,15 @@ class Bloodhound(TorchApp):
         else:
             embedding_model = module.hparams.embedding_model
             embedding_model.layers = ESMLayers.from_value(embedding_model.layers)
+
+        seq_count = module.hparams.get('seq_count', 32)
+
         self.classification_tree = module.hparams.classification_tree
-        self.gene_id_dict = module.hparams.gene_id_dict
         domain = "ar53" if len(self.gene_id_dict) == 53 else "bac120"
 
+        ####################
+        # GTDBTK Setup
+        ####################
         genomes = dict()
         sequence = Path(sequence)
         if sequence.is_dir():
@@ -196,7 +206,9 @@ class Bloodhound(TorchApp):
 
         self.name = sequence.name
     
-        os.environ["GTDBTK_DATA_PATH"] = "/data/gpfs/projects/punim2199/gambit_data/release214/minimal/"
+        assert gtdbtk_data is not None, f"Please give the path to the GTDBTK data directory."
+        assert Path(gtdbtk_data).is_dir()
+        os.environ["GTDBTK_DATA_PATH"] = str(gtdbtk_data)
 
         markers = Markers(cpus)
         markers.identify(
@@ -210,29 +222,57 @@ class Bloodhound(TorchApp):
         )
     
         single_copy_fasta = out_dir / "identify/intermediate_results/single_copy_fasta"/domain
-    
-        embeddings = []
-        self.gene_family_names = []
-        for fasta in single_copy_fasta.rglob("*.fa"):
-            if fasta.stem not in self.gene_id_dict:
-                continue
+
+        ###############
+        # Set directory for Memmap Array
+        ###############
+        if not memmap_array_path:
+            # get temporary directory
+            import tempfile
             
+            self.temp_dir = Path(tempfile.mkdtemp())
+            print(f"Using temporary directory {self.temp_dir} to store the memmap array with embeddings")
+            memmap_array_path = self.temp_dir / "embeddings.npy"
+            memmap_index = self.temp_dir / "embeddings.txt"
+
+    
+        #######################
+        # Create Embeddings
+        #######################
+        embeddings = []
+        accessions = []
+        assert len(genomes) == 1 # hack for now
+        genome = list(genomes.keys())[0]
+        for fasta in single_copy_fasta.rglob("*.fa"):
             # read the fasta file sequence remove the header
             seq = fasta.read_text().split("\n")[1]
             vector =  embedding_model(seq)
             if vector is not None and not torch.isnan(vector).any():
                 vector = vector.cpu().detach().clone().numpy()
-                vector = torch.as_tensor(vector)
                 embeddings.append(vector)
-                self.gene_family_names.append(fasta.stem)
+
+                gene_family_id = fasta.stem
+                accession = f"{genome}/{gene_family_id}"
+                accessions.append(accession)
+
             del vector        
 
-        gene_family_ids = [self.gene_id_dict[gene_family_name] for gene_family_name in self.gene_family_names]
+        embeddings = np.as_array(embeddings)
+        memmap_array = np.memmap(memmap_array_path, dtype=dtype, mode='w+', shape=embeddings.shape)
+        memmap_array[:] = embeddings[:,:]
+        memmap_array.flush()
 
-        # TODO Save the embeddings
+        memmap_index.write_text("\n".join(accessions))
 
-        dataset = BloodhoundPredictionDataset(embeddings=embeddings, gene_family_ids=gene_family_ids)
-        dataloader =  DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        # Copy memmap for gene family into output memmap
+        self.prediction_dataset = BloodhoundPredictionDataset(
+            array=embeddings, 
+            accessions=accessions,
+            seq_count=seq_count,
+            repeats=repeats,
+            seed=42,
+        )
+        dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
         return dataloader
 
@@ -321,7 +361,7 @@ class Bloodhound(TorchApp):
     @method
     def output_results(
         self, 
-        gene_results, 
+        results, 
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
         output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
         output_averaged_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
@@ -334,7 +374,6 @@ class Bloodhound(TorchApp):
         gene_images:bool=False,
         **kwargs,
     ):
-        assert self.gene_id_dict
         assert self.classification_tree
 
         if output_gene_csv or output_gene_tips_csv or gene_images:

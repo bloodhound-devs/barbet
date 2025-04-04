@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import lightning as L
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from corgi.seqtree import SeqTree
 
 
@@ -24,7 +24,7 @@ def gene_id_from_accession(accession:str):
     return accession.split("/")[-1]
 
 
-def choose_k_from_n(lst, k) -> list:
+def choose_k_from_n(lst, k) -> list[int]:
     n = len(lst)
     if n == 0:
         return []
@@ -35,21 +35,76 @@ def choose_k_from_n(lst, k) -> list:
 
 
 @dataclass(kw_only=True)
-class BloodhoundDataset(Dataset):
-    accessions: list[str]
+class BloodhoundStack():
+    species:str
+    array_indices:nd.array
+
+
+@dataclass(kw_only=True)
+class BloodhoundPredictionDataset(Dataset):
     array:np.memmap|np.ndarray
-    gene_id_dict: dict[str, int]
-    accession_to_array_index:dict[str,int]|None=None
+    accessions: list[str]
+    seq_count:int
+    repeats:int = 2
+    seed:int = 42
+    stacks: list[BloodhoundStack] = field(init=False)
+
+    def __post_init__(self):
+        species_to_array_indices = defaultdict(set)
+        for index, accession in enumerate(accessions):
+            slash_position = accession.rfind("/")
+            assert slash_position != -1
+            species = accession[:slash_position]
+            species_to_array_indices[species].add(index)
+
+        # Build stacks
+        random.seed(self.seed)
+        stacks = []
+        for species, species_array_indices in species_to_array_indices.items():
+            stack_indices = []
+            remainder = []
+            for repeat_index in range(self.repeats + 1):
+                if len(remainder) == 0 and repeat_index >= self.repeats:
+                    break
+
+                # Finish Remainder
+                species_array_indices_set = set(species_array_indices)
+                available = species_array_indices_set - set(remainder)
+                to_add = random.sample(available, self.seq_count - len(remainder))
+                to_add_set = set(to_add)
+                assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
+
+                new_stack = sorted(remainder + to_add)
+                stack_indices.append(new_stack)
+
+                remainder = list(species_array_indices_set - to_add_set)
+                random.shuffle(remainder)
+
+                # If we have already added each item the required number of times, then stop
+                if repeat_index >= self.repeats:
+                    break
+
+                while len(remainder) >= self.seq_count:
+                    stack_indices.append( remainder[:self.seq_count] )
+                    remainder = remainder[self.seq_count:]
+                            
+            stack = BloodhoundStack(species=species, array_indices=stack_indices)
+            stacks.append(stack)
 
     def __len__(self):
-        return len(self.accessions)
+        return len(self.stacks)
 
     def __getitem__(self, idx):
-        accession = self.accessions[idx]
-        array_index = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        embedding = torch.as_tensor(np.array(self.array[array_index,:], copy=False), dtype=torch.float16)
-        gene_id = gene_id_from_accession(accession)
-        return embedding, self.gene_id_dict[gene_id]
+        stack = self.stacks[idx]
+        array_indices = stack.array_indices
+
+        assert len(array_indices) > 0, f"Stack has no array indices"
+        with torch.no_grad():
+            data = np.array(self.array[array_indices, :], copy=False)
+            embeddings = torch.tensor(data, dtype=torch.float16)
+            del data
+        
+        return embeddings
 
 
 @dataclass(kw_only=True)
