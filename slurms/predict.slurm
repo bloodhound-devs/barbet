@@ -76,12 +76,14 @@ bloodhound \
     --output-averaged-csv outputs-GCA_001027105.1/GCA_001027105.1-averaged.csv
 
 
-CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/bac120-stack-esm33.st-b4f1536l2g2lr0.0002ep70a512s32val0/version_0/checkpoints/weights-epoch=57-valid_loss=1.1.ckpt
+#CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/bac120-stack-esm33.st-b4f1536l2g2lr0.0002ep70a512s32val0/version_0/checkpoints/weights-epoch=57-valid_loss=1.1.ckpt
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/bac120-stack-esm12.st-b4f768l2g2lr0.0002ep70a512s32prod/version_0/checkpoints/weights-epoch=68-valid_loss=0.24.ckpt
 bloodhound  \
     --checkpoint $CHECKPOINT \
     --input MAG-GUT840.fa.gz \
     --out-dir outputs/ \
-    --memmap-array MAG-GUT840.npy \
-    --memmap-index MAG-GUT840.idx \
-    --gtdbtk-data 
+    --memmap-array MAG-GUT840-ESM12.npy \
+    --memmap-index MAG-GUT840-ESM12.idx \
+    --gtdbtk-data /data/gpfs/projects/punim2199/gambit_data/release220/ \
+    --output-csv MAG-GUT840-ESM12.csv \
     --torch-hub $TORCH_HOME 

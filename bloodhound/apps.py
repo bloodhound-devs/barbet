@@ -187,7 +187,6 @@ class Bloodhound(TorchApp):
         # esm_layers = ESMLayers.from_value(module.hparams.get('esm_layers', module.hparams.embedding_model.layers))
         # embedding_model = module.hparams.embedding_model
         # embedding_model.setup(layers = esm_layers, hub_dir=torch_hub) # HACK
-        # breakpoint()
         
         seq_count = module.hparams.get('seq_count', 32)
         self.classification_tree = module.hparams.classification_tree
@@ -307,7 +306,8 @@ class Bloodhound(TorchApp):
     ) -> pd.DataFrame:
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
         
-        category_names = [self.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root]
+        node_list = getattr(self.classification_tree, 'node_list_softmax', self.classification_tree.node_list)
+        category_names = [self.node_to_str(node) for node in node_list if not node.is_root]
 
         results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
         
