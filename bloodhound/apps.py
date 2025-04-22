@@ -306,7 +306,7 @@ class Bloodhound(TorchApp):
     ) -> pd.DataFrame:
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
         
-        node_list = getattr(self.classification_tree, 'node_list_softmax', self.classification_tree.node_list)
+        node_list = self.classification_tree.node_list_softmax
         category_names = [self.node_to_str(node) for node in node_list if not node.is_root]
 
         results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
