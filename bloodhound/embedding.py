@@ -69,6 +69,7 @@ def get_node(lineage:str, lineage_to_node:dict[str,SoftmaxNode]) -> SoftmaxNode:
     if lineage in lineage_to_node:
         return lineage_to_node[lineage]
 
+    assert ";" in lineage, f"Semi-colon ';' not found in lineage '{lineage}'"
     split_point = lineage.rfind(";")
     parent_lineage = lineage[:split_point]
     name = lineage[split_point+1:]
