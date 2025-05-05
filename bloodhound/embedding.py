@@ -1,3 +1,4 @@
+import gzip
 import os
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -15,6 +16,24 @@ import typer
 from dataclasses import dataclass
 
 from .data import read_memmap, RANKS
+
+
+def _open(path, mode='rt', **kwargs):
+    """
+    Open a file normally, or with gzip if it ends in .gz.
+    
+    Args:
+        path (str or Path): The path to the file.
+        mode (str): The mode to open the file with (default 'rt' for reading text).
+        **kwargs: Additional arguments passed to open or gzip.open.
+
+    Returns:
+        A file object.
+    """
+    path = Path(path)
+    if path.suffix == '.gz':
+        return gzip.open(path, mode, **kwargs)
+    return open(path, mode, **kwargs)
 
 
 def set_validation_rank_to_seqtree(
@@ -198,7 +217,7 @@ class Embedding(CLIApp, ABC):
 
         # Fill out tree with taxonomy
         accession_to_node = {}
-        with open(taxonomy) as f:
+        with _open(taxonomy) as f:
             for line in f:
                 accesssion, lineage = line.split("\t")
 
@@ -379,6 +398,7 @@ class Embedding(CLIApp, ABC):
         print(f"Building seqtree")
         keys = []
         counts = []
+        node_to_partition_dict = dict()
         for family_index in track(range(family_count)):
             keys_path = output_dir / f"{family_index}.txt"
 
@@ -394,7 +414,7 @@ class Embedding(CLIApp, ABC):
                 for key in family_index_keys:
                     species_accession = key.split("/")[0]
                     node = accession_to_node[species_accession]
-                    partition = random.randint(0,partitions-1)
+                    partition = node_to_partition_dict.setdefault(key, random.randint(0, partitions - 1))
 
                     # Add to seqtree
                     seqtree.add(key, node, partition)
