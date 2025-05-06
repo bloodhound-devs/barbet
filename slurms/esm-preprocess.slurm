@@ -11,7 +11,7 @@
  
 #SBATCH --mem-per-cpu=120G
  
-#SBATCH -p cascade
+#SBATCH -p sapphire
 # SBATCH -p gpu-a100,gpu-h100
 # SBATCH --gres=gpu:1
 #SBATCH --account=punim2199
@@ -25,7 +25,7 @@ module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
  
-source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
+source .venv/bin/activate
 
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
@@ -34,14 +34,19 @@ DOMAIN=bac120
 #DOMAIN=ar53
 LAYERS=12
 
+
 bloodhound-esm preprocess \
-    --taxonomy /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_taxonomy_r220.tsv \
-    --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
-    --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}
+    --taxonomy /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_taxonomy_r226.tsv.gz \
+    --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
+    --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}
 
 python seqtree-representatives.py \
-    /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st \
-    /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_reps_r220.tar.gz \
-    /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS}/esm${LAYERS}-reps.st
+    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st \
+    /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_reps_r226.tar.gz \
+    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}-reps.st
 
-seqtree prune /data/gpfs/projects/punim2199/preprocessed/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st 4 /data/gpfs/projects/punim2199/preprocessed/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    
+seqtree prune /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st 4 /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    
+
+seqtree layer-size /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st
+seqtree layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st
+seqtree layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    

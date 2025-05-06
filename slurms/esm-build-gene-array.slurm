@@ -33,11 +33,13 @@ export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
 DOMAIN=bac120
 #DOMAIN=ar53
-LAYERS=12
+LAYERS=6
+#LAYERS=12
+FAMILY_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 
 bloodhound-esm build-gene-array \
     --layers $LAYERS \
-    --marker-genes /data/gpfs/projects/punim2199/gambit_data/release220-partial/${DOMAIN}_marker_genes_all_r220.tar.gz \
-    --output-dir /data/gpfs/projects/punim2199/preprocessed/${DOMAIN}/esm${LAYERS} \
+    --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
+    --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS} \
     --hub-dir $TORCH_HOME \
-    --family-index $SLURM_ARRAY_TASK_ID
+    --family-index $FAMILY_INDEX

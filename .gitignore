@@ -170,4 +170,4 @@ lightning_logs/
 logs/
 robdemo.sh
 
-MAG-GUT840.*
+MAG-GUT840*
