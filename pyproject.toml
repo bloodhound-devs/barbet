@@ -24,18 +24,8 @@ torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightn
 hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
 bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "lightning"}
 
-# alphafold = "^2.0.0" # PyPi version of alphafold is stuck at 2.0.0 and it won't work (throws error about missing alphafold.model and alphafold.model.tf
-# alphafold = {git = "https://github.com/google-deepmind/alphafold.git", rev = "main"}
-
 torch = "=2.2.0"
-transformers = "^4.40.2"
-sentencepiece = "^0.2.0"
-dm-haiku = "^0.0.12"
-jax = "^0.4.28"
 tqdm = "^4.66.4"
-jaxlib = "^0.4.28"
-wandb = "^0.17.0"
-biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module has been deprecated in 1.83 and it was not there before 1.78. Needed for alphafold >=2.3.2
 lightning = "^2.3.3"
 gtdbtk = "^2.4.0"
 
