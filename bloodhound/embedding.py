@@ -1,6 +1,7 @@
 import gzip
 import os
 from pathlib import Path
+import os
 from abc import ABC, abstractmethod
 from Bio import SeqIO
 import random
@@ -291,7 +292,6 @@ class Embedding(CLIApp, ABC):
             
             member = members[family_index]
             print(f"Processing file {family_index} in {marker_genes}")
-
 
             f = tar.extractfile(member)
             marker_id = Path(member.name).with_suffix("").name[prefix_length:]
