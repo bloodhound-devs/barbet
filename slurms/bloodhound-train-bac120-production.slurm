@@ -54,7 +54,7 @@ EPOCHS=70
 BATCH=4
 
 
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
+PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 
 MEMMAP=/tmp/${DOMAIN}-esm${ESM_LAYERS}.npy
@@ -81,7 +81,7 @@ bloodhound-tools train  \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-stack-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${SEQ_COUNT}prod \
+        --run-name  ${DOMAIN}-stack-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${SEQ_COUNT}prod-r226 \
         --num-workers 4 \
         --train-all \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
