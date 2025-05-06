@@ -51,7 +51,7 @@ class ESMEmbedding(Embedding):
     @method
     def setup(
         self, 
-        layers:ESMLayers=typer.Option(..., help="The number of ESM layers to use."),
+        layers:ESMLayers=typer.Option(ESMLayers.T6, help="The number of ESM layers to use."),
         hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
     ):
         if layers and not getattr(self, 'layers', None):
