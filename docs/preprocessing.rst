@@ -67,4 +67,4 @@ This will create three files called:
 
 If you used a different number of layers, the files will be called ``esm{layers}.npy``, ``esm{layers}.txt``, and ``esm{layers}.st``.
 
-Now you are ready to begin training your model.
+Now you are ready to begin :doc:`training` your model.

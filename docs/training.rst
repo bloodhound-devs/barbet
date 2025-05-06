@@ -2,7 +2,7 @@
 Training
 ================================
 
-Once you have preprocessed  the dataset, you can train the model.
+Once you have :doc:`preprocessed <preprocessing>` the dataset, you can train the model.
 
 Small Model 
 ================================
