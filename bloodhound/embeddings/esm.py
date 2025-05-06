@@ -15,6 +15,19 @@ class ESMLayers(Enum):
     T36 = "36"
     T48 = "48"
 
+    @classmethod
+    def from_value(cls, value: int|str) -> "ESMLayers":
+        for layer in cls:
+            if layer.value == str(value):
+                return layer
+        return None
+    
+    def __int__(self):
+        return int(self.value)
+    
+    def __str__(self):
+        return str(self.value)
+
     def model_name(self) -> str:
         match self:
             case ESMLayers.T48:
@@ -41,8 +54,14 @@ class ESMEmbedding(Embedding):
         layers:ESMLayers=typer.Option(..., help="The number of ESM layers to use."),
         hub_dir:Path=typer.Option(None, help="The torch hub directory where the ESM models will be cached."),
     ):
-        self.layers = layers
-        assert layers in ESMLayers, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
+        if layers and not getattr(self, 'layers', None):
+            self.layers = layers
+
+        if isinstance(self.layers, (str,int)):
+            self.layers = ESMLayers.from_value(self.layers)
+        
+        assert self.layers is not None, f"Please ensure the number of ESM layers is one of " + ", ".join(ESMLayers.keys())
+        assert isinstance(self.layers, ESMLayers)
 
         self.hub_dir = hub_dir
         if hub_dir:
@@ -53,6 +72,7 @@ class ESMEmbedding(Embedding):
         self.alphabet = None
 
     def __getstate__(self):
+        return dict(max_length=self.max_length, layers=str(self.layers))
         # Return a dictionary of attributes to be pickled
         state = self.__dict__.copy()
         # Remove the attribute that should not be pickled
@@ -67,12 +87,15 @@ class ESMEmbedding(Embedding):
         return state
 
     def __setstate__(self, state):
+        self.__init__()
+
         # Restore the object state from the unpickled state
         self.__dict__.update(state)
         self.model = None
         self.device = None
         self.batch_converter = None
         self.alphabet = None
+        self.hub_dir = None
 
     def load(self):
         self.model, self.alphabet = self.layers.get_model_alphabet()
@@ -81,8 +104,15 @@ class ESMEmbedding(Embedding):
         self.model = self.model.to(self.device)
 
     def embed(self, seq:str) -> torch.Tensor:
-        """ Takes a protein sequence as a string and returns an embedding vector. """
+        """ Takes a protein sequence as a string and returns an embedding tensor per residue. """
+        if isinstance(self.layers, (str,int)):
+            self.layers = ESMLayers.from_value(self.layers)
+        
         layers = int(self.layers.value)
+
+        # Handle ambiguous AAs
+        # https://github.com/facebookresearch/esm/issues/164
+        seq = seq.replace("J", "X")
 
         if not self.model:
             self.load()
@@ -96,14 +126,11 @@ class ESMEmbedding(Embedding):
             results = self.model(batch_tokens, repr_layers=[layers], return_contacts=True)
         token_representations = results["representations"][layers]
 
-        # Generate per-sequence representations via averaging
-        # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
-        sequence_representations = []
-        for i, tokens_len in enumerate(batch_lens):
-            sequence_representations.append(token_representations[i, 1 : tokens_len - 1].mean(0))
+        assert len(batch_lens) == 1, f"More than one length found"
+        assert token_representations.size(0) == 1, f"More than one representation found"
 
-        vector = sequence_representations[0]
-        # if torch.isnan(vector).any():
-        #     return None
+        # Strip off the beginning-of-sequence and end-of-sequence tokens
+        embedding_tensor = token_representations[0, 1 : batch_lens[0] - 1]
+        assert len(seq) == len(embedding_tensor), f"Embedding representation incorrect length. should be {len(seq)} but is {len(embedding_tensor)}"
 
-        return vector        
+        return embedding_tensor

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "Bloodhound"
-version = "0.1.0"
+version = "0.1.1"
 description = "Geometric Analysis of MicroBIal Taxonomies"
 authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
 license = "Apache-2.0"
@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
+python = ">=3.10,<3.13" # Had to update the minium version from 3.9 to 3.10 because of Bio and biopython
 torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
 # hierarchicalsoftmax = "^1.1.0"
 hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
@@ -37,8 +37,9 @@ jaxlib = "^0.4.28"
 wandb = "^0.17.0"
 biopython = "1.81" # ONLY USE 1.81! 1.83 won't work as Bio.Data.SCOPData module has been deprecated in 1.83 and it was not there before 1.78. Needed for alphafold >=2.3.2
 lightning = "^2.3.3"
+gtdbtk = "^2.4.0"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^6.2.5"
 ipykernel = "^6.6.1"
 coverage = "^5.5"

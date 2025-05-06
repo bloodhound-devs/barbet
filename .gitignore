@@ -168,3 +168,6 @@ cython_debug/
 #.idea/
 lightning_logs/
 logs/
+robdemo.sh
+
+MAG-GUT840.*

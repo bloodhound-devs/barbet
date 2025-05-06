@@ -1,3 +1,5 @@
+import gzip
+import os
 from pathlib import Path
 import os
 from abc import ABC, abstractmethod
@@ -12,8 +14,27 @@ import torch
 from io import StringIO
 from torchapp.cli import CLIApp, tool, method
 import typer
+from dataclasses import dataclass
 
 from .data import read_memmap, RANKS
+
+
+def _open(path, mode='rt', **kwargs):
+    """
+    Open a file normally, or with gzip if it ends in .gz.
+    
+    Args:
+        path (str or Path): The path to the file.
+        mode (str): The mode to open the file with (default 'rt' for reading text).
+        **kwargs: Additional arguments passed to open or gzip.open.
+
+    Returns:
+        A file object.
+    """
+    path = Path(path)
+    if path.suffix == '.gz':
+        return gzip.open(path, mode, **kwargs)
+    return open(path, mode, **kwargs)
 
 
 def set_validation_rank_to_seqtree(
@@ -41,7 +62,6 @@ def set_validation_rank_to_seqtree(
 
 def get_key(accession:str, gene:str) -> str:
     """ Returns the standard format of a key """
-    # assert len(accession) == len("RS_GCF_000006945.2")
     key = f"{accession}/{gene}"
     return key
 
@@ -50,6 +70,7 @@ def get_node(lineage:str, lineage_to_node:dict[str,SoftmaxNode]) -> SoftmaxNode:
     if lineage in lineage_to_node:
         return lineage_to_node[lineage]
 
+    assert ";" in lineage, f"Semi-colon ';' not found in lineage '{lineage}'"
     split_point = lineage.rfind(";")
     parent_lineage = lineage[:split_point]
     name = lineage[split_point+1:]
@@ -59,15 +80,133 @@ def get_node(lineage:str, lineage_to_node:dict[str,SoftmaxNode]) -> SoftmaxNode:
     return node
 
 
+def generate_overlapping_intervals(total: int, interval_size: int, min_overlap: int, check:bool=True, variable_size:bool=False) -> list[tuple[int, int]]:
+    """
+    Creates a list of overlapping intervals within a specified range, adjusting the interval size to ensure
+    that the overlap is approximately the same across all intervals.
+
+    Args:
+        total (int): The total range within which intervals are to be created.
+        max_interval_size (int): The maximum size of each interval.
+        min_overlap (int): The minimum number of units by which consecutive intervals overlap.
+        check (bool): If True, checks are performed to ensure that the intervals meet the specified conditions.
+
+    Returns:
+        list[tuple[int, int]]: A list of tuples where each tuple represents the start (inclusive) 
+        and end (exclusive) of an interval.
+
+    Example:
+        >>> generate_overlapping_intervals(20, 5, 2)
+        [(0, 5), (3, 8), (6, 11), (9, 14), (12, 17), (15, 20)]
+    """
+    intervals = []
+    start = 0
+
+    if total == 0:
+        return intervals
+    
+    max_interval_size = interval_size
+    assert interval_size
+    assert min_overlap is not None
+    assert interval_size > min_overlap, f"Max interval size of {interval_size} must be greater than min overlap of {min_overlap}"
+
+    # Calculate the number of intervals needed to cover the range
+    num_intervals, remainder = divmod(total - min_overlap, interval_size - min_overlap)
+    if remainder > 0:
+        num_intervals += 1
+
+    # Calculate the exact interval size to ensure consistent overlap
+    overlap = min_overlap
+    if variable_size:
+        if num_intervals > 1:
+            interval_size, remainder = divmod(total + (num_intervals - 1) * overlap, num_intervals)
+            if remainder > 0:
+                interval_size += 1
+    else:
+        # If the size is fixed, then vary the overlap to keep it even
+        if num_intervals > 1:
+            overlap, remainder = divmod( num_intervals * interval_size - total, num_intervals - 1)
+            if overlap < min_overlap:
+                overlap = min_overlap
+
+    while True:
+        end = start + interval_size
+        if end > total:
+            end = total
+            start = max(end - interval_size,0)
+        intervals.append((start, end))
+        start += interval_size - overlap
+        if end >= total:
+            break
+
+    if check:
+        assert intervals[0][0] == 0
+        assert intervals[-1][1] == total
+        assert len(intervals) == num_intervals, f"Expected {num_intervals} intervals, got {len(intervals)}"
+
+        assert interval_size <= max_interval_size, f"Interval size of {interval_size} exceeds max interval size of {max_interval_size}"
+        for interval in intervals:
+            assert interval[1] - interval[0] == interval_size, f"Interval size of {interval[1] - interval[0]} is not the expected size {interval_size}"
+
+        for i in range(1, len(intervals)):
+            overlap = intervals[i - 1][1] - intervals[i][0]
+            assert overlap >= min_overlap, f"Min overlap condition of {min_overlap} not met for intervals {intervals[i - 1]} and {intervals[i]} (overlap {overlap})"
+
+    return intervals
+
+
+@dataclass
 class Embedding(CLIApp, ABC):
+    """ A class for embedding protein sequences. """
+    max_length:int|None=None
+    overlap:int=64
+
+    def __post_init__(self):
+        super().__init__()
+
     @abstractmethod
     def embed(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
-        pass
+        raise NotImplementedError
+
+    def reduce(self, tensor:torch.Tensor) -> torch.Tensor:
+        if tensor.ndim == 2:
+            tensor = tensor.mean(dim=0)
+        assert tensor.ndim == 1
+        return tensor
 
     def __call__(self, seq:str) -> torch.Tensor:
         """ Takes a protein sequence as a string and returns an embedding vector. """
-        return self.embed(seq)
+        if not self.max_length or len(seq) <= self.max_length:
+            tensor = self.embed(seq)
+            return self.reduce(tensor)
+        
+        epsilon = 0.1
+        intervals = generate_overlapping_intervals(len(seq), self.max_length, self.overlap)
+        weights = torch.zeros( (len(seq),), device="cpu" )
+        tensor = None
+        for start,end in intervals:
+            result = self.embed(seq[start:end]).cpu()
+
+            assert result.shape[0] == end-start
+            embedding_size = result.shape[1]
+
+            if tensor is None:
+                tensor = torch.zeros( (len(seq), embedding_size ), device="cpu")
+
+            assert tensor.shape[-1] == embedding_size
+
+            interval_indexes = torch.arange(end-start)
+            distance_from_ends = torch.min( interval_indexes-start, end-interval_indexes-1 )
+            
+            weight = epsilon + torch.minimum(distance_from_ends, torch.tensor(self.overlap))
+
+            tensor[start:end] += result * weight.unsqueeze(1)
+            weights[start:end] += weight
+
+        tensor = tensor/weights.unsqueeze(1)
+
+        return self.reduce(tensor)
     
     @method
     def setup(self, **kwargs):
@@ -80,7 +219,7 @@ class Embedding(CLIApp, ABC):
 
         # Fill out tree with taxonomy
         accession_to_node = {}
-        with open(taxonomy) as f:
+        with _open(taxonomy) as f:
             for line in f:
                 accesssion, lineage = line.split("\t")
 
@@ -96,14 +235,40 @@ class Embedding(CLIApp, ABC):
         return seqtree, accession_to_node
 
     @tool("setup")
+    def test_lengths(
+        self,
+        end:int=5_000,
+        start:int=1000,
+        retries:int=5,
+        **kwargs,
+    ):
+        def random_amino_acid_sequence(k):
+            amino_acids = "ACDEFGHIKLMNPQRSTVWY"  # standard 20 amino acids
+            return ''.join(random.choice(amino_acids) for _ in range(k))
+        
+        self.max_length = None
+        self.setup(**kwargs)
+        for ii in track(range(start,end)):
+            for _ in range(retries):
+                seq = random_amino_acid_sequence(ii)
+                try:
+                    self(seq)
+                except Exception as err:
+                    print(f"{ii}: {err}")
+                    return
+
+
+    @tool("setup")
     def build_gene_array(
         self,
         marker_genes:Path=typer.Option(default=..., help="The path to the marker genes tarball (e.g. bac120_msa_marker_genes_all_r220.tar.gz)."),
         family_index:int=typer.Option(default=..., help="The index for the gene family to use. E.g. if there are 120 gene families then this should be a number from 0 to 119."),
         output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
         flush_every:int=typer.Option(default=5_000, help="An interval to flush the memmap array as it is generated."),
+        max_length:int=None,
         **kwargs,
     ):
+        self.max_length = max_length
         self.setup(**kwargs)
 
         assert marker_genes is not None
@@ -148,14 +313,17 @@ class Embedding(CLIApp, ABC):
                     vector = self(seq)
                 except Exception as err:
                     print(f"{key} ({len(seq)}): {err}", file=error_file)
+                    print(f"{key} ({len(seq)}): {err}")
                     continue
 
                 if vector is None:
                     print(f"{key} ({len(seq)}): Embedding is None", file=error_file)
+                    print(f"{key} ({len(seq)}): Embedding is None")
                     continue
 
                 if torch.isnan(vector).any():
                     print(f"{key} ({len(seq)}): Embedding contains NaN", file=error_file)
+                    print(f"{key} ({len(seq)}): Embedding contains NaN")
                     continue
 
                 if memmap_wip_array is None:
@@ -231,8 +399,13 @@ class Embedding(CLIApp, ABC):
         print(f"Building seqtree")
         keys = []
         counts = []
+        node_to_partition_dict = dict()
         for family_index in track(range(family_count)):
             keys_path = output_dir / f"{family_index}.txt"
+
+            if not keys_path.exists():
+                counts.append(0)
+                continue
 
             with open(keys_path) as f:
                 family_index_keys = [line.strip() for line in f]
@@ -242,11 +415,13 @@ class Embedding(CLIApp, ABC):
                 for key in family_index_keys:
                     species_accession = key.split("/")[0]
                     node = accession_to_node[species_accession]
-                    partition = random.randint(0,partitions-1)
+                    partition = node_to_partition_dict.setdefault(key, random.randint(0, partitions - 1))
 
                     # Add to seqtree
                     seqtree.add(key, node, partition)
         
+        assert len(counts) == family_count
+
         # Save seqtree
         seqtree_path = output_dir / f"{output_dir.name}.st"
         print(f"Saving seqtree to {seqtree_path}")
@@ -262,9 +437,10 @@ class Embedding(CLIApp, ABC):
 
             # Build memmap for gene family if it doesn't exist
             if not my_memmap_path.exists():
-                print("Building", my_memmap_path)
-                self.build_gene_array(marker_genes=marker_genes, family_index=family_index, output_dir=output_dir)
-                assert my_memmap_path.exists()
+                continue
+                # print("Building", my_memmap_path)
+                # self.build_gene_array(marker_genes=marker_genes, family_index=family_index, output_dir=output_dir)
+                # assert my_memmap_path.exists()
 
             my_memmap = read_memmap(my_memmap_path, family_count)
 
