@@ -56,8 +56,9 @@ Credits
 
 .. start-credits
 
-Wytamma Wirth, Robert Turnbull, Mar Quiroga
-For more information contact: <robert.turnbull@unimelb.edu.au>
+Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth
+
+For more information contact: <wytamma.wirth@unimelb.edu.au>
 
 Created using torchapp (https://github.com/rbturnbull/torchapp).
 

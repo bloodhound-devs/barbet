@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "Bloodhound"
-copyright = "2022, Wytamma Wirth, Robert Turnbull, Mar Quiroga"
-author = "Wytamma Wirth, Robert Turnbull, Mar Quiroga"
+copyright = "2025, Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth"
+author = "Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth"
 
 # The full version, including alpha/beta/rc tags
 release = "0.1.0"
