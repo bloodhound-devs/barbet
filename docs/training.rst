@@ -16,8 +16,9 @@ Here is an example to train the model with the default parameters which results 
         --memmap  preprocessed/esm${LAYERS}.npy \
         --memmap-index  preprocessed/esm${LAYERS}.txt \
         --seqtree  preprocessed/esm${LAYERS}.st \
+        --max-learning-rate 0.0002 \
+        --max-epochs 70 \
         --train-all \
-        --num-workers 4 \
         --embedding-model ESM${LAYERS} \
         --run-name "Bloodhound-ESM${LAYERS}-small"
 
@@ -40,8 +41,9 @@ If you want to train the large Bloodhound model, you can use the following comma
         --memmap-index  preprocessed/esm${LAYERS}.txt \
         --seqtree  preprocessed/esm${LAYERS}.st \
         --features 1536 \
+        --max-learning-rate 0.0002 \
+        --max-epochs 70 \
         --train-all \
-        --num-workers 4 \
         --embedding-model ESM${LAYERS} \
         --run-name "Bloodhound-ESM${LAYERS}-large"
 
