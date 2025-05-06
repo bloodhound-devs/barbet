@@ -17,6 +17,8 @@ Geometric Analysis of MicroBIal Taxonomies
    :caption: Contents:
 
    quickstart
+   preprocessing
+   training
    api
    cli
    credits
