@@ -58,11 +58,11 @@ The final preprocessing step is to collect the embeddings into a single file and
     bloodhound-esm preprocess \
         --taxonomy bac120_taxonomy.tsv.gz \
         --marker-genes bac120_marker_genes_all.tar.gz \
-        --output-dir esm6
+        --output-dir preprocessed
 
 This will create three files called:
-    - ``esm6.npy`` - the memmap array with embeddings for each gene family
-    - ``esm6.txt`` - the index to the memmap array
-    - ``esm6.st`` - the SeqTree which stores the location on the taxonomy tree for each genome.
+    - ``preprocessed.npy`` - the memmap array with embeddings for each gene family
+    - ``preprocessed.txt`` - the index to the memmap array
+    - ``preprocessed.st`` - the SeqTree which stores the location on the taxonomy tree for each genome.
 
 Now you are ready to begin :doc:`training` your model.
