@@ -33,7 +33,7 @@ The next step in preprocessing is to build embedding files for each gene family.
 .. code-block:: bash
 
     for INDEX in $(seq 0 119); do
-        bloodhound-esm build-gene-embeddings \
+        bloodhound-esm build-gene-array \
             --marker-genes bac120_marker_genes_all.tar.gz \
             --output-dir preprocessed/ \
             --family-index $INDEX
@@ -58,13 +58,11 @@ The final preprocessing step is to collect the embeddings into a single file and
     bloodhound-esm preprocess \
         --taxonomy bac120_taxonomy.tsv.gz \
         --marker-genes bac120_marker_genes_all.tar.gz \
-        --output-dir preprocessed
+        --output-dir esm6
 
 This will create three files called:
     - ``esm6.npy`` - the memmap array with embeddings for each gene family
     - ``esm6.txt`` - the index to the memmap array
     - ``esm6.st`` - the SeqTree which stores the location on the taxonomy tree for each genome.
-
-If you used a different number of layers, the files will be called ``esm{layers}.npy``, ``esm{layers}.txt``, and ``esm{layers}.st``.
 
 Now you are ready to begin :doc:`training` your model.
