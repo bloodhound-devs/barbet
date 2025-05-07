@@ -18,12 +18,10 @@ import pandas as pd
 import os
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
-from torchapp import Param, method, tool, TorchApp
+from torchapp import Param, method, TorchApp
 from .models import BloodhoundModel
-from .gtdbtk import read_tophits, read_tigrfam, read_pfam
-from .embedding import get_key
 from .data import read_memmap, RANKS, BloodhoundDataModule, BloodhoundPredictionDataset
-from .embeddings.esm import ESMEmbedding, ESMLayers
+from .embeddings.esm import ESMEmbedding
 
 console = Console()
 
