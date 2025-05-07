@@ -85,7 +85,7 @@ class Bloodhound(TorchApp):
     @method
     def model(
         self,
-        features:int=1024,
+        features:int=768,
         intermediate_layers:int=2,
         growth_factor:float=2.0,
         attention_size:int=512,
@@ -123,11 +123,11 @@ class Bloodhound(TorchApp):
     def data(
         self,
         max_items:int=0,
-        num_workers:int=0,
+        num_workers:int=4,
         validation_partition:int=0,
-        batch_size:int = 1,
+        batch_size:int = 4,
         test_partition:int=-1,
-        seq_count:int=0,
+        seq_count:int=32,
         train_all:bool = False,
     ) -> Iterable|L.LightningDataModule:
         return BloodhoundDataModule(

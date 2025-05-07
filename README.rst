@@ -36,17 +36,17 @@ Install using pip:
 Usage
 ==================================
 
-See the options for training a model with the command:
-
-.. code-block:: bash
-
-    bloodhound-tools train --help
-
 See the options for making inferences with the command:
 
 .. code-block:: bash
 
     bloodhound --help
+
+Training
+==================================
+
+You can train the model on releases from GTDB or your own custom dataset.
+See the instructions in the documentation for `preprocessing <https://bloodhound-devs.github.io/bloodhound/preprocessing.html>`_ and `training <https://bloodhound-devs.github.io/bloodhound/training.html>`_.
 
 .. end-quickstart
 
