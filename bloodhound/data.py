@@ -71,7 +71,7 @@ class BloodhoundPredictionDataset(Dataset):
                 # Finish Remainder
                 species_array_indices_set = set(species_array_indices)
                 available = species_array_indices_set - set(remainder)
-                to_add = random.sample(available, self.seq_count - len(remainder))
+                to_add = random.sample(list(available), self.seq_count - len(remainder))
                 to_add_set = set(to_add)
                 assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
 
