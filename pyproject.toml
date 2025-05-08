@@ -26,7 +26,6 @@ bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "lightning"}
 torch = "=2.2.0"
 tqdm = "^4.66.4"
 lightning = "^2.3.3"
-gtdbtk = "^2.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6.2.5"

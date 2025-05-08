@@ -12,6 +12,12 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Set up Pixi environment
+      uses: prefix-dev/setup-pixi@v0.8.3
+      with:
+        cache: true
+        locked: true
+
     - name: Initialise Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
@@ -33,7 +39,8 @@ jobs:
         poetry env use "${{ matrix.python-version }}"
         poetry install
 
-    - name: Run tests
+    - name: Run tests in Pixi environment
+      shell: pixi run bash -e {0}
       run: |
         poetry env info
         poetry run pytest
