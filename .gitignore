@@ -176,3 +176,4 @@ MAG-GUT840*
 *.egg-info
 out/
 .DS_Store
+tests/data/weights-epoch=69-valid_loss=0.28.ckpt
