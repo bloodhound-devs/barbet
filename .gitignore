@@ -3,7 +3,7 @@ wandb/*
 wandb*/*
 outputs/*
 *.out
-
+preprocessed/
 
 # From https://github.com/github/gitignore/blob/main/Python.gitignore
 # Byte-compiled / optimized / DLL files
@@ -171,3 +171,8 @@ logs/
 robdemo.sh
 
 MAG-GUT840*
+# pixi environments
+.pixi
+*.egg-info
+out/
+.DS_Store
