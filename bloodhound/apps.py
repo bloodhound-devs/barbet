@@ -10,12 +10,12 @@ from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from rich.console import Console
-from gtdbtk.markers import Markers
+
+from bloodhound.markers import extract_single_copy_markers
 from collections import defaultdict
 from rich.progress import track
 
 import pandas as pd
-import os
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from torchapp import Param, method, TorchApp
@@ -168,7 +168,7 @@ class Bloodhound(TorchApp):
         module,
         input:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
         out_dir:Path=Param(help="A path to the output directory."),
-        gtdbtk_data:Path=Param(help="The path to the GTDBTK data directory", envvar="GTDBTK_DATA_PATH"),
+        hmm_models_dir:Path=Param(help="A path to the HMM models directory containing the Pfam and TIGRFAM HMMs."),
         torch_hub:Path=Param(help="The path to the Torch Hub directory", envvar="TORCH_HOME"),
         memmap_array:Path=None, # TODO explain
         memmap_index:Path=None, # TODO explain
@@ -205,42 +205,22 @@ class Bloodhound(TorchApp):
             accessions = memmap_index.read_text().strip().split("\n")
             embeddings = read_memmap(memmap_array_path, len(accessions))
         else:
-            # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
+            # TODO: figure out the best way to set this e.g. use the number of ar53 vs bac120 genes found 
+            # or use extract it from the bloodhound model
             domain = "bac120"
+            # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
 
             ####################
-            # GTDBTK Setup
+            # Extract single copy marker genes
             ####################
-        
-            assert gtdbtk_data is not None, f"Please give the path to the GTDBTK data directory."
-            assert Path(gtdbtk_data).is_dir()
-            os.environ["GTDBTK_DATA_PATH"] = str(gtdbtk_data)
-
-            markers = Markers(cpus)
-            markers.identify(
-                genomes,
-                tln_tables=dict(),
-                out_dir=out_dir,
-                prefix=prefix,
-                force=False,
-                genes=False,
-                write_single_copy_genes=True,
+            fastas = extract_single_copy_markers(
+                genomes=genomes,
+                out_dir=str(out_dir),
+                cpus=cpus,
+                force=True,
+                pfam_db=hmm_models_dir / "pfam" / "Pfam-A.hmm",
+                tigr_db=hmm_models_dir / "tigrfam" / "tigrfam.hmm",
             )
-        
-            single_copy_fasta = out_dir / "identify/intermediate_results/single_copy_fasta"/domain
-
-            ###############
-            # Set directory for Memmap Array
-            ###############
-            # if not memmap_array_path:
-            #     # get temporary directory
-            #     import tempfile
-                
-            #     self.temp_dir = Path(tempfile.mkdtemp())
-            #     print(f"Using temporary directory {self.temp_dir} to store the memmap array with embeddings")
-            #     memmap_array_path = self.temp_dir / "embeddings.npy"
-            #     memmap_index = self.temp_dir / "embeddings.txt"
-
         
             #######################
             # Create Embeddings
@@ -249,9 +229,10 @@ class Bloodhound(TorchApp):
             accessions = []
             assert len(genomes) == 1 # hack for now
             genome = list(genomes.keys())[0]
-            fastas = list(single_copy_fasta.rglob("*.fa"))
-            for fasta in track(fastas):
+            fastas = fastas[genome][domain]
+            for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
                 # read the fasta file sequence remove the header
+                fasta = Path(fasta)
                 seq = fasta.read_text().split("\n")[1]
                 vector = module.hparams.embedding_model(seq)
                 if vector is not None and not torch.isnan(vector).any():
