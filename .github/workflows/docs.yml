@@ -51,7 +51,8 @@ jobs:
     - name: Build Sphinx docs
       run: poetry run sphinx-build -b html docs gh-pages
 
-    - name: Run tests and generate coverage report
+    - name: Run tests and generate coverage report in Pixi environment
+      shell: pixi run bash -e {0}
       run: |
         poetry run coverage run -m pytest
         echo "COVERAGE=$(poetry run coverage report --precision 2 | grep TOTAL | tr -s ' ' | cut -f 4 -d " ")" >> $GITHUB_ENV
