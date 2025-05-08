@@ -74,7 +74,7 @@ def test_identify_single_copy_fasta_integration(tmp_path, monkeypatch):
 
     out = extract_single_copy_markers(
         genomes={genome_fa.stem: str(genome_fa)},
-        out_dir=str('out'),
+        out_dir=str(tmp_path),
         cpus=2,
         pfam_db=str(pfam_db),
         tigr_db=str(tigr_db),
