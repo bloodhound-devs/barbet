@@ -1,6 +1,9 @@
 import os
 import subprocess
 from typing import Dict, List, Tuple
+import gzip
+import shutil
+import tempfile
 from rich.progress import (
     Progress,
     TextColumn,
@@ -266,13 +269,23 @@ def run_prodigal(
 
     if force and os.path.exists(prot_fa):
         os.remove(prot_fa)
-    if not os.path.exists(prot_fa):
-        subprocess.run(
-            ["prodigal", "-i", fasta_path, "-a", prot_fa, "-p", "meta"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+
+    # check if gzipped
+    if fasta_path.endswith(".gz"):
+        with gzip.open(fasta_path, "rt") as gz_in, tempfile.NamedTemporaryFile(
+            mode="w+", delete=False, suffix=".fasta"
+        ) as tmp_fa:
+            shutil.copyfileobj(gz_in, tmp_fa)
+            tmp_fa_path = tmp_fa.name
+        input_path = tmp_fa_path
+    else:
+        input_path = fasta_path
+    subprocess.run(
+        ["prodigal", "-a", prot_fa, "-p", "meta", "-i", input_path], 
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     return prot_fa
 
 

@@ -31,7 +31,7 @@ def test_run_prodigal_integration(tmp_path):
     that proteins are predicted.
     """
     data_dir = Path(__file__).parent / "data"
-    genome_fa = data_dir / "MAG-GUT41.fa"
+    genome_fa = data_dir / "MAG-GUT41.fa.gz"
     assert genome_fa.exists(), f"Missing test genome at {genome_fa}"
     
     out_dir = tmp_path / "prodigal_out"
@@ -69,7 +69,7 @@ def test_identify_single_copy_fasta_integration(tmp_path, monkeypatch):
 
 
     # run on the real test genome
-    genome_fa = data_dir / "MAG-GUT41.fa"
+    genome_fa = data_dir / "MAG-GUT41.fa.gz"
     assert genome_fa.exists()
 
     out = extract_single_copy_markers(
