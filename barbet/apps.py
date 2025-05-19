@@ -33,24 +33,24 @@ class Barbet(TorchApp):
         self,
         memmap:str=None,
         memmap_index:str=None,
-        seqtree:str=None,
+        treedict:str=None,
         in_memory:bool=False,
         tip_alpha:float=None,
     ) -> None:
-        if not seqtree:
-            raise ValueError("seqtree is required")
+        if not treedict:
+            raise ValueError("treedict is required")
         if not memmap:
             raise ValueError("memmap is required")
         if not memmap_index:
             raise ValueError("memmap_index is required")        
 
-        print(f"Loading seqtree {seqtree}")
-        individual_seqtree = TreeDict.load(seqtree)
-        self.seqtree = TreeDict(classification_tree=individual_seqtree.classification_tree)
+        print(f"Loading treedict {treedict}")
+        individual_treedict = TreeDict.load(treedict)
+        self.treedict = TreeDict(classification_tree=individual_treedict.classification_tree)
 
         # Sets the loss weighting for the tips
         if tip_alpha:
-            for tip in self.seqtree.classification_tree.leaves:
+            for tip in self.treedict.classification_tree.leaves:
                 tip.parent.alpha = tip_alpha
 
         print(f"Loading memmap")
@@ -61,7 +61,7 @@ class Barbet(TorchApp):
                 accession = key.strip().split("/")[0]
 
                 if len(self.accession_to_array_index[accession]) == 0:
-                    self.seqtree[accession] = individual_seqtree[key]
+                    self.treedict[accession] = individual_treedict[key]
 
                 self.accession_to_array_index[accession].append(key_index)
         count = key_index + 1
@@ -71,12 +71,12 @@ class Barbet(TorchApp):
         if in_memory:
             self.array = np.array(self.array)
 
-        self.classification_tree = self.seqtree.classification_tree
+        self.classification_tree = self.treedict.classification_tree
         assert self.classification_tree is not None
 
         # Get list of gene families
         family_ids = set()
-        for accession in self.seqtree:
+        for accession in self.treedict:
             gene_id = accession.split("/")[-1]
             family_ids.add(gene_id)
 
@@ -133,7 +133,7 @@ class Barbet(TorchApp):
         return BarbetDataModule(
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
-            seqtree=self.seqtree,
+            treedict=self.treedict,
             gene_id_dict=self.gene_id_dict,
             max_items=max_items,
             batch_size=batch_size,
@@ -158,7 +158,7 @@ class Barbet(TorchApp):
 
         return dict(
             embedding_model=embedding_model,
-            classification_tree=self.seqtree.classification_tree,
+            classification_tree=self.treedict.classification_tree,
             gene_id_dict=self.gene_id_dict,
         )
     

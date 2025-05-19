@@ -42,5 +42,5 @@ SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${
 REPRESENTATIVES=/home/rturnbull/wytamma/barbet_data/release220-partial/${DOMAIN}_marker_genes_reps_r220.tar.gz
 SEQTREE_REPS=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}-reps.st
 
-python seqtree-representatives.py $SEQTREE $REPRESENTATIVES $SEQTREE_REPS
+python treedict-representatives.py $SEQTREE $REPRESENTATIVES $SEQTREE_REPS
 

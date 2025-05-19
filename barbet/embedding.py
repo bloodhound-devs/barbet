@@ -37,8 +37,8 @@ def _open(path, mode='rt', **kwargs):
     return open(path, mode, **kwargs)
 
 
-def set_validation_rank_to_seqtree(
-    seqtree:TreeDict,
+def set_validation_rank_to_treedict(
+    treedict:TreeDict,
     validation_rank:str="species",
     partitions:int=5,
 ) -> TreeDict:
@@ -48,16 +48,16 @@ def set_validation_rank_to_seqtree(
     validation_rank_index = RANKS.index(validation_rank)
 
     partitions_dict = {}
-    for key in seqtree:
-        node = seqtree.node(key)             
+    for key in treedict:
+        node = treedict.node(key)             
         # Assign validation partition at set rank
         partition_node = node.ancestors[validation_rank_index]
         if partition_node not in partitions_dict:
             partitions_dict[partition_node] = random.randint(0,partitions-1)
 
-        seqtree[key].partition = partitions_dict[partition_node]
+        treedict[key].partition = partitions_dict[partition_node]
 
-    return seqtree
+    return treedict
 
 
 def get_key(accession:str, gene:str) -> str:
@@ -212,7 +212,7 @@ class Embedding(CLIApp, ABC):
     def setup(self, **kwargs):
         pass
 
-    def build_seqtree(self, taxonomy:Path) -> tuple[TreeDict,dict[str,SoftmaxNode]]:
+    def build_treedict(self, taxonomy:Path) -> tuple[TreeDict,dict[str,SoftmaxNode]]:
         # Create root of tree
         lineage_to_node = {}
         root = None
@@ -231,8 +231,8 @@ class Embedding(CLIApp, ABC):
                 node = get_node(lineage, lineage_to_node)
                 accession_to_node[accesssion] = node
         
-        seqtree = TreeDict(classification_tree=root)
-        return seqtree, accession_to_node
+        treedict = TreeDict(classification_tree=root)
+        return treedict, accession_to_node
 
     @tool("setup")
     def test_lengths(
@@ -364,15 +364,15 @@ class Embedding(CLIApp, ABC):
     @tool
     def set_validation_rank(
         self,
-        seqtree:Path=typer.Option(default=..., help="The path to the seqtree file."),
-        output:Path=typer.Option(default=..., help="The path to save the adapted seqtree file."),
+        treedict:Path=typer.Option(default=..., help="The path to the treedict file."),
+        output:Path=typer.Option(default=..., help="The path to save the adapted treedict file."),
         validation_rank:str=typer.Option(default="species", help="The rank to hold out for cross-validation."),
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
     ) -> TreeDict:
-        seqtree = TreeDict.load(seqtree)
-        set_validation_rank_to_seqtree(seqtree, validation_rank=validation_rank, partitions=partitions)
-        seqtree.save(output)
-        return seqtree
+        treedict = TreeDict.load(treedict)
+        set_validation_rank_to_treedict(treedict, validation_rank=validation_rank, partitions=partitions)
+        treedict.save(output)
+        return treedict
 
     @tool
     def preprocess(
@@ -383,7 +383,7 @@ class Embedding(CLIApp, ABC):
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
         seed:int=typer.Option(default=42, help="The random seed."),
     ):
-        seqtree, accession_to_node = self.build_seqtree(taxonomy)
+        treedict, accession_to_node = self.build_treedict(taxonomy)
 
         dtype = 'float16'
 
@@ -396,7 +396,7 @@ class Embedding(CLIApp, ABC):
         print(f"{family_count} gene families found.")
 
         # Read and collect accessions
-        print(f"Building seqtree")
+        print(f"Building treedict")
         keys = []
         counts = []
         node_to_partition_dict = dict()
@@ -417,15 +417,15 @@ class Embedding(CLIApp, ABC):
                     node = accession_to_node[species_accession]
                     partition = node_to_partition_dict.setdefault(key, random.randint(0, partitions - 1))
 
-                    # Add to seqtree
-                    seqtree.add(key, node, partition)
+                    # Add to treedict
+                    treedict.add(key, node, partition)
         
         assert len(counts) == family_count
 
-        # Save seqtree
-        seqtree_path = output_dir / f"{output_dir.name}.st"
-        print(f"Saving seqtree to {seqtree_path}")
-        seqtree.save(seqtree_path)
+        # Save treedict
+        treedict_path = output_dir / f"{output_dir.name}.st"
+        print(f"Saving treedict to {treedict_path}")
+        treedict.save(treedict_path)
 
         # Concatenate numpy memmap arrays
         memmap_array = None
@@ -466,3 +466,45 @@ class Embedding(CLIApp, ABC):
             for key in keys:
                 print(key, file=f)
 
+    @tool
+    def prune_to_representatives(treedict:Path, representatives:Path, output:Path):
+        print("Getting list of representatives from", representatives)
+        keys_to_keep = []
+        with tarfile.open(representatives, "r:gz") as tar:
+            members = [member for member in tar.getmembers() if member.isfile() and member.name.endswith(".faa")]
+            
+            print(f"Processing {len(members)} files in {representatives}")
+
+            for member in track(members):
+                f = tar.extractfile(member)
+                marker_id = Path(member.name.split("_")[-1]).with_suffix("").name
+
+                fasta_io = StringIO(f.read().decode('ascii'))
+
+                for record in SeqIO.parse(fasta_io, "fasta"):
+                    species_accession = record.id
+                    key = get_key(species_accession, marker_id)
+                    keys_to_keep.append(key)
+
+        # keys_to_keep = set(keys_to_keep)
+        print(f"Keeping {len(keys_to_keep)} representatives")
+
+        print(f"Loading treedict {treedict}")
+        
+        treedict = TreeDict.load(treedict)
+        print("Total", len(treedict))
+        missing = []
+        for key in track(keys_to_keep):
+            if key not in treedict:
+                missing.append(key)
+
+        print(f"{len(missing)} representatives missing output {len(keys_to_keep)} (total: {len(treedict)})")
+        if len(missing):
+            keys_to_keep = [k for k in keys_to_keep if k not in missing]
+
+        new_treedict = TreeDict(treedict.classification_tree)
+        new_treedict.update({k:treedict[k] for k in keys_to_keep})
+        print("Total after pruning", len(new_treedict))
+
+        print("Saving treedict to", output)
+        new_treedict.save(output)        

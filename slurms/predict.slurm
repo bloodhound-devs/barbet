@@ -59,7 +59,7 @@ barbet \
     --checkpoint $CHECKPOINT \
     --out-dir outputs \
     --sequence /data/gpfs/projects/punim2199/wytamma/dev/gambit/GCF_000145595.1.fna \
-    --seqtree $SEQTREE \
+    --treedict $SEQTREE \
     --image-dir outputs/GCF_000145595.1-images \
     --output-csv outputs/GCF_000145595.1.csv \
     --output-gene-csv outputs/GCF_000145595.1-gene.csv \
@@ -69,7 +69,7 @@ barbet \
     --checkpoint $CHECKPOINT \
     --out-dir outputs-GCA_001027105.1 \
     --sequence /home/rturnbull/wytamma/rob/GCA_001027105.1_ASM102710v1_genomic.fna \
-    --seqtree $SEQTREE \
+    --treedict $SEQTREE \
     --image-dir outputs-GCA_001027105.1/GCA_001027105.1-images \
     --output-csv outputs-GCA_001027105.1/GCA_001027105.1.csv \
     --output-gene-csv outputs-GCA_001027105.1/GCA_001027105.1-gene.csv \

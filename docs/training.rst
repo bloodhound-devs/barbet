@@ -15,7 +15,7 @@ Here is an example to train the model with the default parameters which results 
     barbet-tools train  \
         --memmap  preprocessed/esm${LAYERS}.npy \
         --memmap-index  preprocessed/esm${LAYERS}.txt \
-        --seqtree  preprocessed/esm${LAYERS}.st \
+        --treedict  preprocessed/esm${LAYERS}.st \
         --max-learning-rate 0.0002 \
         --max-epochs 70 \
         --train-all \
@@ -39,7 +39,7 @@ If you want to train the large Barbet model, you can use the following command:
     barbet-tools train  \
         --memmap  preprocessed/esm${LAYERS}.npy \
         --memmap-index  preprocessed/esm${LAYERS}.txt \
-        --seqtree  preprocessed/esm${LAYERS}.st \
+        --treedict  preprocessed/esm${LAYERS}.st \
         --features 1536 \
         --max-learning-rate 0.0002 \
         --max-epochs 70 \

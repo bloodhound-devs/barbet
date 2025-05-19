@@ -111,7 +111,7 @@ class BarbetPredictionDataset(Dataset):
 @dataclass(kw_only=True)
 class BarbetTrainingDataset(Dataset):
     accessions: list[str]
-    seqtree: TreeDict
+    treedict: TreeDict
     array:np.memmap|np.ndarray
     gene_id_dict: dict[str, int]
     accession_to_array_index:dict[str,int]|None=None
@@ -133,11 +133,11 @@ class BarbetTrainingDataset(Dataset):
             del data
     
         # gene_id = gene_id_from_accession(accession)
-        seq_detail = self.seqtree[accession]
+        seq_detail = self.treedict[accession]
         node_id = int(seq_detail.node_id)
         del seq_detail
         
-        # return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
+        # return embedding, self.gene_id_dict[gene_id], self.treedict[self.accessions[0]].node_id # hack
         return embedding, node_id
 
 
@@ -158,7 +158,7 @@ class BarbetTrainingDataset(Dataset):
 
 @dataclass
 class BarbetDataModule(L.LightningDataModule):
-    seqtree: TreeDict
+    treedict: TreeDict
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
     accession_to_array_index:dict[str,int]
@@ -172,7 +172,7 @@ class BarbetDataModule(L.LightningDataModule):
 
     def __init__(
         self,
-        seqtree: TreeDict,
+        treedict: TreeDict,
         array:np.memmap|np.ndarray,
         accession_to_array_index:dict[str,list[int]],
         gene_id_dict: dict[str,int],
@@ -187,7 +187,7 @@ class BarbetDataModule(L.LightningDataModule):
         super().__init__()
         self.array = array
         self.accession_to_array_index = accession_to_array_index
-        self.seqtree = seqtree
+        self.treedict = treedict
         self.gene_id_dict = gene_id_dict
         self.max_items = max_items
         self.batch_size = batch_size
@@ -203,7 +203,7 @@ class BarbetDataModule(L.LightningDataModule):
         self.training = []
         self.validation = []
 
-        for accession, details in self.seqtree.items():
+        for accession, details in self.treedict.items():
             partition = details.partition
             if partition == self.test_partition:
                 continue
@@ -223,7 +223,7 @@ class BarbetDataModule(L.LightningDataModule):
     def create_dataset(self, accessions:list[str]) -> BarbetTrainingDataset:
         return BarbetTrainingDataset(
             accessions=accessions, 
-            seqtree=self.seqtree, 
+            treedict=self.treedict, 
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
             gene_id_dict=self.gene_id_dict,

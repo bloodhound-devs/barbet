@@ -61,7 +61,7 @@ SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
 barbet-tools train  \
         --memmap  $MEMMAP \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
-        --seqtree  $SEQTREE \
+        --treedict  $SEQTREE \
         --features $FEATURES \
         --intermediate-layers $LAYERS \
         --growth-factor $GROWTH \
