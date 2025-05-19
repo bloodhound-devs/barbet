@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import lightning as L
 from dataclasses import dataclass, field
-from corgi.seqtree import SeqTree
+from hierarchicalsoftmax import TreeDict
 
 
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
@@ -36,19 +36,19 @@ def choose_k_from_n(lst, k) -> list[int]:
 
 
 @dataclass(kw_only=True)
-class BloodhoundStack():
+class BarbetStack():
     species:str
     array_indices:np.array
 
 
 @dataclass(kw_only=True)
-class BloodhoundPredictionDataset(Dataset):
+class BarbetPredictionDataset(Dataset):
     array:np.memmap|np.ndarray
     accessions: list[str]
     seq_count:int
     repeats:int = 2
     seed:int = 42
-    stacks: list[BloodhoundStack] = field(init=False)
+    stacks: list[BarbetStack] = field(init=False)
 
     def __post_init__(self):
         species_to_array_indices = defaultdict(set)
@@ -89,7 +89,7 @@ class BloodhoundPredictionDataset(Dataset):
                     stack_indices.append( remainder[:self.seq_count] )
                     remainder = remainder[self.seq_count:]
                             
-            stack = BloodhoundStack(species=species, array_indices=stack_indices)
+            stack = BarbetStack(species=species, array_indices=stack_indices)
             self.stacks.append(stack)
 
     def __len__(self):
@@ -109,9 +109,9 @@ class BloodhoundPredictionDataset(Dataset):
 
 
 @dataclass(kw_only=True)
-class BloodhoundTrainingDataset(Dataset):
+class BarbetTrainingDataset(Dataset):
     accessions: list[str]
-    seqtree: SeqTree
+    seqtree: TreeDict
     array:np.memmap|np.ndarray
     gene_id_dict: dict[str, int]
     accession_to_array_index:dict[str,int]|None=None
@@ -142,7 +142,7 @@ class BloodhoundTrainingDataset(Dataset):
 
 
 # @dataclass(kw_only=True)
-# class BloodhoundPredictionDataset(Dataset):
+# class BarbetPredictionDataset(Dataset):
 #     embeddings: list[torch.Tensor]
 #     gene_family_ids: list[int]
 
@@ -157,8 +157,8 @@ class BloodhoundTrainingDataset(Dataset):
     
 
 @dataclass
-class BloodhoundDataModule(L.LightningDataModule):
-    seqtree: SeqTree
+class BarbetDataModule(L.LightningDataModule):
+    seqtree: TreeDict
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
     accession_to_array_index:dict[str,int]
@@ -172,7 +172,7 @@ class BloodhoundDataModule(L.LightningDataModule):
 
     def __init__(
         self,
-        seqtree: SeqTree,
+        seqtree: TreeDict,
         array:np.memmap|np.ndarray,
         accession_to_array_index:dict[str,list[int]],
         gene_id_dict: dict[str,int],
@@ -220,8 +220,8 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
 
-    def create_dataset(self, accessions:list[str]) -> BloodhoundTrainingDataset:
-        return BloodhoundTrainingDataset(
+    def create_dataset(self, accessions:list[str]) -> BarbetTrainingDataset:
+        return BarbetTrainingDataset(
             accessions=accessions, 
             seqtree=self.seqtree, 
             array=self.array,

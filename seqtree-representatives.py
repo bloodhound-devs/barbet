@@ -2,11 +2,11 @@ from io import StringIO
 import tarfile
 from pathlib import Path
 import typer
-from corgi.seqtree import SeqTree
+from hierarchicalsoftmax import TreeDict
 from rich.progress import track
 from Bio import SeqIO
 
-from bloodhound.embedding import get_key
+from barbet.embedding import get_key
 
 app = typer.Typer()
 
@@ -36,7 +36,7 @@ def prune_to_representatives(seqtree:Path, representatives:Path, output:Path):
 
     print(f"Loading seqtree {seqtree}")
     
-    seqtree = SeqTree.load(seqtree)
+    seqtree = TreeDict.load(seqtree)
     print("Total", len(seqtree))
     missing = []
     for key in track(keys_to_keep):
@@ -47,7 +47,7 @@ def prune_to_representatives(seqtree:Path, representatives:Path, output:Path):
     if len(missing):
         keys_to_keep = [k for k in keys_to_keep if k not in missing]
 
-    new_seqtree = SeqTree(seqtree.classification_tree)
+    new_seqtree = TreeDict(seqtree.classification_tree)
     new_seqtree.update({k:seqtree[k] for k in keys_to_keep})
     print("Total after pruning", len(new_seqtree))
 

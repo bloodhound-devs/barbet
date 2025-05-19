@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from bloodhound.markers import (
+from barbet.markers import (
     run_prodigal,
     parse_domtblout_top_hits,
     extract_single_copy_markers

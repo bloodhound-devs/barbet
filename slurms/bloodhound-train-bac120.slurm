@@ -29,7 +29,7 @@ module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
 
-source /data/gpfs/projects/punim2199/rob/bloodhound-stack/.venv/bin/activate
+source /data/gpfs/projects/punim2199/rob/barbet-stack/.venv/bin/activate
 
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
@@ -68,7 +68,7 @@ SEQTREE_NAME=esm${ESM_LAYERS}.st
 SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
 
 
-bloodhound-tools train  \
+barbet-tools train  \
         --memmap  $MEMMAP \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --seqtree  $SEQTREE \

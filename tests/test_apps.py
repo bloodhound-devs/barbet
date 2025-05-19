@@ -1,6 +1,6 @@
 # from torchapp.testing import TorchAppTestCase
-# from bloodhound._old_apps_fastai import Bloodhound
+# from barbet._old_apps_fastai import Barbet
 
 
-# class TestBloodhound(TorchAppTestCase):
-#     app_class = Bloodhound
+# class TestBarbet(TorchAppTestCase):
+#     app_class = Barbet

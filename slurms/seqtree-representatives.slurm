@@ -1,7 +1,7 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=bloodhound-lightning
+#SBATCH --job-name=barbet-lightning
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -32,14 +32,14 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
  
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-source /home/rturnbull/wytamma/rob/bloodhound-lightning/.venv/bin/activate
+source /home/rturnbull/wytamma/rob/barbet-lightning/.venv/bin/activate
 
 DOMAIN=bac120
 #DOMAIN=ar53
 ESM_LAYERS=6
 
 SEQTREE=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.st
-REPRESENTATIVES=/home/rturnbull/wytamma/bloodhound_data/release220-partial/${DOMAIN}_marker_genes_reps_r220.tar.gz
+REPRESENTATIVES=/home/rturnbull/wytamma/barbet_data/release220-partial/${DOMAIN}_marker_genes_reps_r220.tar.gz
 SEQTREE_REPS=/data/projects/punim2199/rob/release220/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}-reps.st
 
 python seqtree-representatives.py $SEQTREE $REPRESENTATIVES $SEQTREE_REPS

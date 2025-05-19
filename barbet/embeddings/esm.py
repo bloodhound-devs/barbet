@@ -3,7 +3,7 @@ import typer
 from pathlib import Path
 import torch
 from torchapp.cli import method
-from bloodhound.embedding import Embedding
+from barbet.embedding import Embedding
 
 
 

@@ -5,13 +5,13 @@ from torch import nn
 import lightning as L
 from torchmetrics import Metric
 from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
-from corgi.seqtree import SeqTree
+from hierarchicalsoftmax import TreeDict
 from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from rich.console import Console
 
-from bloodhound.markers import extract_single_copy_markers
+from barbet.markers import extract_single_copy_markers
 from collections import defaultdict
 from rich.progress import track
 
@@ -19,15 +19,15 @@ import pandas as pd
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from torchapp import Param, method, TorchApp
-from .models import BloodhoundModel
-from .data import read_memmap, RANKS, BloodhoundDataModule, BloodhoundPredictionDataset
+from .models import BarbetModel
+from .data import read_memmap, RANKS, BarbetDataModule, BarbetPredictionDataset
 from .embeddings.esm import ESMEmbedding
 
 console = Console()
 
 
 
-class Bloodhound(TorchApp):
+class Barbet(TorchApp):
     @method
     def setup(
         self,
@@ -45,8 +45,8 @@ class Bloodhound(TorchApp):
             raise ValueError("memmap_index is required")        
 
         print(f"Loading seqtree {seqtree}")
-        individual_seqtree = SeqTree.load(seqtree)
-        self.seqtree = SeqTree(classification_tree=individual_seqtree.classification_tree)
+        individual_seqtree = TreeDict.load(seqtree)
+        self.seqtree = TreeDict(classification_tree=individual_seqtree.classification_tree)
 
         # Sets the loss weighting for the tips
         if tip_alpha:
@@ -90,7 +90,7 @@ class Bloodhound(TorchApp):
         growth_factor:float=2.0,
         attention_size:int=512,
     ) -> nn.Module:
-        return BloodhoundModel(
+        return BarbetModel(
             classification_tree=self.classification_tree,
             features=features,
             intermediate_layers=intermediate_layers,
@@ -130,7 +130,7 @@ class Bloodhound(TorchApp):
         seq_count:int=32,
         train_all:bool = False,
     ) -> Iterable|L.LightningDataModule:
-        return BloodhoundDataModule(
+        return BarbetDataModule(
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
             seqtree=self.seqtree,
@@ -206,7 +206,7 @@ class Bloodhound(TorchApp):
             embeddings = read_memmap(memmap_array_path, len(accessions))
         else:
             # TODO: figure out the best way to set this e.g. use the number of ar53 vs bac120 genes found 
-            # or use extract it from the bloodhound model
+            # or use extract it from the barbet model
             domain = "bac120"
             # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
 
@@ -256,7 +256,7 @@ class Bloodhound(TorchApp):
                 memmap_index.write_text("\n".join(accessions))
 
         # Copy memmap for gene family into output memmap
-        self.prediction_dataset = BloodhoundPredictionDataset(
+        self.prediction_dataset = BarbetPredictionDataset(
             array=embeddings, 
             accessions=accessions,
             seq_count=seq_count,

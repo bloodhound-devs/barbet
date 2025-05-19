@@ -26,7 +26,7 @@ module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
  
-source /data/gpfs/projects/punim2199/rob/bloodhound/.venv/bin/activate
+source /data/gpfs/projects/punim2199/rob/barbet/.venv/bin/activate
 
 export HF_HOME=/data/gpfs/projects/punim2199/huggingface
 export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
@@ -37,7 +37,7 @@ LAYERS=6
 #LAYERS=12
 FAMILY_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 
-bloodhound-esm build-gene-array \
+barbet-esm build-gene-array \
     --layers $LAYERS \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS} \

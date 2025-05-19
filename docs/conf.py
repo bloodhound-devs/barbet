@@ -18,14 +18,14 @@ sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
-project = "Bloodhound"
+project = "Barbet"
 copyright = "2025, Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth"
 author = "Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth"
 
 # The full version, including alpha/beta/rc tags
 release = "0.1.0"
 # import importlib.metadata
-# release = importlib.metadata.version('bloodhound')
+# release = importlib.metadata.version('barbet')
 
 
 # -- General configuration ---------------------------------------------------

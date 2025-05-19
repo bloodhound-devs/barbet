@@ -8,7 +8,7 @@ import random
 import numpy as np
 from rich.progress import track
 from hierarchicalsoftmax import SoftmaxNode
-from corgi.seqtree import SeqTree
+from hierarchicalsoftmax import TreeDict
 import tarfile
 import torch
 from io import StringIO
@@ -38,10 +38,10 @@ def _open(path, mode='rt', **kwargs):
 
 
 def set_validation_rank_to_seqtree(
-    seqtree:SeqTree,
+    seqtree:TreeDict,
     validation_rank:str="species",
     partitions:int=5,
-) -> SeqTree:
+) -> TreeDict:
     # find the taxonomic rank to use for the validation partition
     validation_rank = validation_rank.lower()
     assert validation_rank in RANKS
@@ -212,7 +212,7 @@ class Embedding(CLIApp, ABC):
     def setup(self, **kwargs):
         pass
 
-    def build_seqtree(self, taxonomy:Path) -> tuple[SeqTree,dict[str,SoftmaxNode]]:
+    def build_seqtree(self, taxonomy:Path) -> tuple[TreeDict,dict[str,SoftmaxNode]]:
         # Create root of tree
         lineage_to_node = {}
         root = None
@@ -231,7 +231,7 @@ class Embedding(CLIApp, ABC):
                 node = get_node(lineage, lineage_to_node)
                 accession_to_node[accesssion] = node
         
-        seqtree = SeqTree(classification_tree=root)
+        seqtree = TreeDict(classification_tree=root)
         return seqtree, accession_to_node
 
     @tool("setup")
@@ -368,8 +368,8 @@ class Embedding(CLIApp, ABC):
         output:Path=typer.Option(default=..., help="The path to save the adapted seqtree file."),
         validation_rank:str=typer.Option(default="species", help="The rank to hold out for cross-validation."),
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
-    ) -> SeqTree:
-        seqtree = SeqTree.load(seqtree)
+    ) -> TreeDict:
+        seqtree = TreeDict.load(seqtree)
         set_validation_rank_to_seqtree(seqtree, validation_rank=validation_rank, partitions=partitions)
         seqtree.save(output)
         return seqtree

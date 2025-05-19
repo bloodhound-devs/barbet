@@ -35,7 +35,7 @@ DOMAIN=bac120
 LAYERS=12
 
 
-bloodhound-esm preprocess \
+barbet-esm preprocess \
     --taxonomy /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_taxonomy_r226.tsv.gz \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}

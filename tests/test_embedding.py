@@ -1,5 +1,5 @@
 import torch
-from bloodhound.embedding import Embedding
+from barbet.embedding import Embedding
 
 
 class DummyEmbedding(Embedding):
