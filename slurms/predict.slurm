@@ -33,7 +33,7 @@ module load OpenMPI/4.1.4
 module load HMMER/3.3.2
 module load Graphviz/5.0.0
 
-source /data/gpfs/projects/punim2199/rob/barbet-stack/.venv/bin/activate
+source /data/gpfs/projects/punim2199/rob/barbet/.venv/bin/activate
 
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
@@ -76,7 +76,7 @@ barbet \
     --output-averaged-csv outputs-GCA_001027105.1/GCA_001027105.1-averaged.csv
 
 
-CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet-stack/logs/bac120-stack-esm33.st-b4f1536l2g2lr0.0002ep70a512s32val0/version_0/checkpoints/weights-epoch=57-valid_loss=1.1.ckpt
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/logs/bac120-stack-esm33.st-b4f1536l2g2lr0.0002ep70a512s32val0/version_0/checkpoints/weights-epoch=57-valid_loss=1.1.ckpt
 barbet  \
     --checkpoint $CHECKPOINT \
     --input MAG-GUT840.fa.gz \
@@ -96,8 +96,8 @@ barbet  \
     --torch-hub $TORCH_HOME 
 
 
-#CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet-stack/logs/bac120-stack-esm12.st-b4f768l2g2lr0.0002ep70a512s32prod/version_0/checkpoints/weights-epoch=68-valid_loss=0.24.ckpt
-CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet-stack/logs/bac120-stack-esm12.st-b4f1536l2g2lr0.0002ep70a512s32prodprune/version_0/checkpoints/weights-epoch=61-valid_loss=0.18.ckpt
+#CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/logs/bac120-stack-esm12.st-b4f768l2g2lr0.0002ep70a512s32prod/version_0/checkpoints/weights-epoch=68-valid_loss=0.24.ckpt
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/logs/bac120-stack-esm12.st-b4f1536l2g2lr0.0002ep70a512s32prodprune/version_0/checkpoints/weights-epoch=61-valid_loss=0.18.ckpt
 barbet  \
     --checkpoint $CHECKPOINT \
     --input MAG-GUT840.fa.gz \
