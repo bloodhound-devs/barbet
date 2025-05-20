@@ -46,8 +46,8 @@ ESM_LAYERS=12
 
 # HACK
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
-SEQTREE_NAME=esm${ESM_LAYERS}-reps.st
-SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
+TREEDICT_NAME=esm${ESM_LAYERS}-reps.st
+TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 
 
 #CHECKPOINT=/home/rturnbull/wytamma/rob/barbet/logs/bac120-esm12-reps.st-b16f1536l2g2e4lr0.0001/version_0/checkpoints/epoch=11-step=6700944.ckpt
@@ -59,7 +59,7 @@ barbet \
     --checkpoint $CHECKPOINT \
     --out-dir outputs \
     --sequence /data/gpfs/projects/punim2199/wytamma/dev/gambit/GCF_000145595.1.fna \
-    --treedict $SEQTREE \
+    --treedict $TREEDICT \
     --image-dir outputs/GCF_000145595.1-images \
     --output-csv outputs/GCF_000145595.1.csv \
     --output-gene-csv outputs/GCF_000145595.1-gene.csv \
@@ -69,7 +69,7 @@ barbet \
     --checkpoint $CHECKPOINT \
     --out-dir outputs-GCA_001027105.1 \
     --sequence /home/rturnbull/wytamma/rob/GCA_001027105.1_ASM102710v1_genomic.fna \
-    --treedict $SEQTREE \
+    --treedict $TREEDICT \
     --image-dir outputs-GCA_001027105.1/GCA_001027105.1-images \
     --output-csv outputs-GCA_001027105.1/GCA_001027105.1.csv \
     --output-gene-csv outputs-GCA_001027105.1/GCA_001027105.1-gene.csv \

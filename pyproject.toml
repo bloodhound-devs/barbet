@@ -21,9 +21,8 @@ classifiers = [
 python = ">=3.10,<3.13"
 torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
 hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
-
+biopython = ">=1.79"
 torch = "=2.2.0"
-tqdm = ">=4.66.4"
 lightning = ">=2.3.3"
 
 [tool.poetry.group.dev.dependencies]

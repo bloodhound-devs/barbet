@@ -53,22 +53,22 @@ if [[ ! -s "$MEMMAP" ]]; then
         cp ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy $MEMMAP
 fi
 
-SEQTREE_NAME=esm${ESM_LAYERS}-reps.st
-#SEQTREE_NAME=esm${ESM_LAYERS}-reps-d4.st
-SEQTREE=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${SEQTREE_NAME}
+TREEDICT_NAME=esm${ESM_LAYERS}-reps.st
+#TREEDICT_NAME=esm${ESM_LAYERS}-reps-d4.st
+TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 
 
 barbet-tools train  \
         --memmap  $MEMMAP \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
-        --treedict  $SEQTREE \
+        --treedict  $TREEDICT \
         --features $FEATURES \
         --intermediate-layers $LAYERS \
         --growth-factor $GROWTH \
         --family-embedding-size $EMBEDDING \
         --max-epochs $EPOCHS \
         --max-learning-rate $LR \
-        --run-name  ${DOMAIN}-${SEQTREE_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR}ep${EPOCHS} \
+        --run-name  ${DOMAIN}-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}e${EMBEDDING}lr${LR}ep${EPOCHS} \
         --num-workers 4 \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 
