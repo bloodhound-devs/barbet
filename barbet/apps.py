@@ -10,8 +10,8 @@ from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from torch.utils.data import DataLoader
 from collections.abc import Iterable
 from rich.console import Console
+from enum import Enum
 
-from barbet.markers import extract_single_copy_markers
 from collections import defaultdict
 from rich.progress import track
 
@@ -19,12 +19,56 @@ import pandas as pd
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
 from torchapp import Param, method, TorchApp
+
+from barbet.markers import extract_single_copy_markers
 from .models import BarbetModel
 from .data import read_memmap, RANKS, BarbetDataModule, BarbetPredictionDataset
 from .embeddings.esm import ESMEmbedding
 
 console = Console()
 
+
+class ImageFormat(str, Enum):
+    """ The image format to use for the output images. """
+    NONE = ""
+
+    # Image formats
+    PNG = "png"
+    JPG = "jpg"
+    JPEG = "jpeg"
+    GIF = "gif"
+    BMP = "bmp"
+    TIFF = "tiff"
+
+    # Vector graphics
+    PDF = "pdf"
+    SVG = "svg"
+    EPS = "eps"
+    PS = "ps"
+    FIG = "fig"
+    CGM = "cgm"
+
+    # Interactive / Web
+    SVGZ = "svgz"
+    IMAP = "imap"
+    CMAPX = "cmapx"
+    XDOT = "xdot"
+
+    # Data formats
+    DOT = "dot"
+    PLAIN = "plain"
+    PLAIN_EXT = "plain-ext"
+
+    # 3D and others
+    VRML = "vrml"
+    XLIB = "xlib"
+
+    def __str__(self):
+        return self.value
+
+    def __bool__(self) -> bool:
+        """ Returns True if the image format is not empty. """
+        return self.value != ""
 
 
 class Barbet(TorchApp):
@@ -166,8 +210,8 @@ class Barbet(TorchApp):
     def prediction_dataloader(
         self,
         module,
-        input:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
-        out_dir:Path=Param(help="A path to the output directory."),
+        genome_path:Path,
+        output_dir:Path=Param(help="A path to the output directory."),
         hmm_models_dir:Path=Param(help="A path to the HMM models directory containing the Pfam and TIGRFAM HMMs."),
         tmp_dir:Path=Param(help="A path to a directory to store temporary files. If not provided, a temporary directory will be created."),
         memmap_array:Path=Param(
@@ -203,15 +247,7 @@ class Barbet(TorchApp):
         self.classification_tree = module.hparams.classification_tree
 
         genomes = dict()
-        input = Path(input)
-        if input.is_dir():
-            for path in input.rglob(f"*.{extension}"):
-                genomes[path.stem] = str(path)
-        else:
-            genomes[input.stem] = str(input)
-
-        self.name = input.name
-
+        genomes[genome_path.stem] = str(genome_path)
 
         memmap_array_path = memmap_array
         if memmap_array_path and memmap_array_path.exists() and memmap_index and memmap_index.exists() and not force_embed:
@@ -229,7 +265,7 @@ class Barbet(TorchApp):
             ####################
             fastas = extract_single_copy_markers(
                 genomes=genomes,
-                out_dir=str(out_dir),
+                out_dir=str(output_dir),
                 cpus=cpus,
                 force=True,
                 pfam_db=hmm_models_dir / "pfam" / "Pfam-A.hmm",
@@ -239,27 +275,27 @@ class Barbet(TorchApp):
             #######################
             # Create Embeddings
             #######################
-            embeddings = []
-            accessions = []
-            assert len(genomes) == 1 # hack for now
-            genome = list(genomes.keys())[0]
-            fastas = fastas[genome][domain]
-            for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
-                # read the fasta file sequence remove the header
-                fasta = Path(fasta)
-                seq = fasta.read_text().split("\n")[1]
-                vector = module.hparams.embedding_model(seq)
-                if vector is not None and not torch.isnan(vector).any():
-                    vector = vector.cpu().detach().clone().numpy()
-                    embeddings.append(vector)
+            for genome in genomes:
+                fastas = fastas[genome][domain]
+                embeddings = []
+                accessions = []
 
-                    gene_family_id = fasta.stem
-                    accession = f"{genome}/{gene_family_id}"
-                    accessions.append(accession)
+                for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
+                    # read the fasta file sequence remove the header
+                    fasta = Path(fasta)
+                    seq = fasta.read_text().split("\n")[1]
+                    vector = module.hparams.embedding_model(seq)
+                    if vector is not None and not torch.isnan(vector).any():
+                        vector = vector.cpu().detach().clone().numpy()
+                        embeddings.append(vector)
 
-                del vector        
+                        gene_family_id = fasta.stem
+                        accession = f"{genome}/{gene_family_id}"
+                        accessions.append(accession)
 
-            embeddings = np.asarray(embeddings).astype(np.float16)
+                    del vector        
+
+                embeddings = np.asarray(embeddings).astype(np.float16)
             if memmap_array_path is not None and memmap_index is not None:
                 memmap_array_path.parent.mkdir(exist_ok=True, parents=True)
                 memmap_array = np.memmap(memmap_array_path, dtype=embeddings.dtype, mode='w+', shape=embeddings.shape)
@@ -287,16 +323,21 @@ class Barbet(TorchApp):
         """
         return str(node).split(",")[-1].strip()
     
-    def output_results_to_df(
-        self,
-        names,
-        results,
-        output_csv: Path,
-        output_tips_csv: Path,
-        image_dir: Path,
-        image_threshold:float,
-        prediction_threshold:float,
+    @method
+    def output_results(
+        self, 
+        results, 
+        genome_path:Path,
+        threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
+        image_format: ImageFormat = Param(default="", help="A path to output the results as images."),
+        image_threshold:float = 0.005,
+        **kwargs,
     ) -> pd.DataFrame:
+        assert self.classification_tree
+
+        # Average results across all stacks
+        results = results.mean(axis=0, keepdims=True)
+
         classification_probabilities = node_probabilities(results, root=self.classification_tree)
         
         node_list = self.classification_tree.node_list_softmax
@@ -310,7 +351,7 @@ class Barbet(TorchApp):
         predictions = greedy_predictions(
             classification_probabilities, 
             root=self.classification_tree, 
-            threshold=prediction_threshold,
+            threshold=threshold,
         )
 
         results_df['greedy_prediction'] = [
@@ -326,21 +367,16 @@ class Barbet(TorchApp):
         
         results_df['probability'] = results_df.apply(get_prediction_probability, axis=1)
 
-        results_df["name"] = names
+        results_df["name"] = [str(genome_path)]
 
         # Reorder columns
         results_df = results_df[["name", "greedy_prediction", "probability" ] + category_names]
 
-        results_df.set_index('name')
-
-        if not (image_dir or output_csv or output_tips_csv):
-            print("No output files requested.")
-
         # Output images
-        if image_dir:
-            console.print(f"Writing inference probability renders to: {image_dir}")
-            image_dir = Path(image_dir)
-            image_paths = [image_dir/f"{name}.png" for name in results_df["name"]]
+        if image_format:
+            console.print(f"Writing inference probability renders to: {output_dir}")
+            output_dir = Path(output_dir)
+            image_paths = [output_dir/f"{name}.{image_format}" for name in results_df["name"]]
             render_probabilities(
                 root=self.classification_tree, 
                 filepaths=image_paths,
@@ -349,106 +385,59 @@ class Barbet(TorchApp):
                 threshold=image_threshold,
             )
 
-        if output_tips_csv:
-            output_tips_csv = Path(output_tips_csv)
-            output_tips_csv.parent.mkdir(exist_ok=True, parents=True)
-            non_tips = [self.node_to_str(node) for node in self.classification_tree.node_list if not node.is_leaf]
-            tips_df = results_df.drop(columns=non_tips)
-            tips_df.to_csv(output_tips_csv, index=False)
-
-        if output_csv:
-            output_csv = Path(output_csv)
-            output_csv.parent.mkdir(exist_ok=True, parents=True)
-            console.print(f"Writing results for {len(results_df)} sequences to: {output_csv}")
-            results_df.transpose().to_csv(output_csv)
-
         return results_df
 
-    @method
-    def output_results(
-        self, 
-        results, 
+    @main("load_checkpoint", "prediction_trainer", "prediction_dataloader", "output_results")
+    def predict(
+        self,
+        input:list[Path]=Param(help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."),
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        output_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
-        output_averaged_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        output_averaged_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
-        output_gene_csv: Path = Param(default=None, help="A path to output the results for individual genes as a CSV."),
-        output_gene_tips_csv: Path = Param(default=None, help="A path to output the results as a CSV which only stores the probabilities at the tips."),
-        image_dir: Path = Param(default=None, help="A path to output the results as images."),
-        image_threshold:float = 0.005,
-        prediction_threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
-        gene_images:bool=False,
+        output_dir:Path=Param(help="A path to the output directory."),
+        greedy_only:bool = True,
         **kwargs,
     ):
-        assert self.classification_tree
+        """ Make predictions with the model. """
+        # Get list of files
+        files = []
+        if isinstance(input, (str, Path)):
+            input = [input]
+        assert len(input) > 0, "No input files provided."
+        for path in input:
+            if path.is_dir():
+                for file in path.rglob("*.fa") + path.rglob("*.fasta") + path.rglob("*.fna"):
+                    files.append(file)
+            elif path.is_file():
+                files.append(path)
 
-        if output_gene_csv or output_gene_tips_csv or gene_images:
-            self.output_results_to_df(
-                self.gene_family_names,
-                results,
-                output_gene_csv,
-                output_gene_tips_csv,
-                image_dir if gene_images else None,
-                image_threshold=image_threshold,
-                prediction_threshold=prediction_threshold,
-            )
+        # Check if any files were found
+        if len(files) == 0:
+            raise ValueError(f"No files found in {input}. Please provide a directory or a list of files.")
 
-        result = self.output_results_to_df(
-            [self.name],
-            results.mean(axis=0, keepdims=True),
-            output_csv,
-            output_tips_csv,
-            image_dir,
-            image_threshold=image_threshold,
-            prediction_threshold=prediction_threshold,
-        )
+        # Check if output directory exists        
+        output_csv = Path(output_csv)
+        output_csv.parent.mkdir(exist_ok=True, parents=True)
+        console.print(f"Writing results for {len(files)} genomes to: {output_csv}")
 
-        # if output_averaged_csv or output_averaged_tips_csv:
-        #     self.output_results_to_df(
-        #         [self.name+"-averaged"],
-        #         results.mean(axis=0, keepdims=True),
-        #         output_averaged_csv,
-        #         output_averaged_tips_csv,
-        #         image_dir,
-        #         image_threshold=image_threshold,
-        #         prediction_threshold=prediction_threshold,
-        #     )
+        # Load the model
+        module = self.load_checkpoint(**kwargs)
+        trainer = self.prediction_trainer(module, **kwargs)
 
-        return result
+        # Make predictions for each file
+        total_df = None
+        for file_index, file in enumerate(files):
+            prediction_dataloader = self.prediction_dataloader(module, input=file, **kwargs)
+            results = trainer.predict(module, dataloaders=prediction_dataloader)
+            results = torch.cat(results, dim=0)
+            results_df = self.output_results(results, file, **kwargs)
 
-    # @method
-    # def extra_callbacks_off(self, **kwargs):
-    #     from lightning.pytorch.callbacks import Callback
-    #     import tracemalloc
-    #     class MemoryLeakCallback(Callback):
-    #         def on_train_start(self, trainer, pl_module):
-    #             # Start tracing memory allocations at the beginning of the training
-    #             tracemalloc.start()
-    #             print("tracemalloc started")
+            if greedy_only:
+                results_df = results_df[["name", "greedy_prediction", "probability"]]
 
-    #         def on_train_batch_start(self, trainer, pl_module, *args, **kwargs):
-    #             # Take a snapshot before the batch starts
-    #             self.snapshot_before = tracemalloc.take_snapshot()
+            if total_df is None:
+                results_df.to_csv(output_csv)
+                total_df = results_df
+            else:
+                total_df = pd.concat([total_df, results_df], axis=0)
+                results_df.to_csv(output_csv, mode='a', header=False)
 
-    #         def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
-    #             # Take a snapshot after the batch ends
-    #             snapshot_after = tracemalloc.take_snapshot()
-                
-    #             # Compare the snapshots
-    #             stats = snapshot_after.compare_to(self.snapshot_before, 'lineno')
-                
-    #             # Log the top memory-consuming lines
-    #             print(f"[Batch {trainer.global_step}] Memory differences:")
-    #             for stat in stats[:20]:
-    #                 print(stat)
-
-    #             # Optionally, monitor peak memory usage
-    #             current, peak = tracemalloc.get_traced_memory()
-    #             print(f"Current memory usage: {current / 1024**2:.2f} MB; Peak: {peak / 1024**2:.2f} MB")
-                
-    #             # Clear traces if needed to prevent tracemalloc from consuming too much memory itself
-    #             tracemalloc.clear_traces()
-
-    #     return [MemoryLeakCallback()]
-    
-
+        return total_df
