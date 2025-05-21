@@ -42,6 +42,22 @@ See the options for making inferences with the command:
 
     bloodhound --help
 
+Model
+==================================
+
+.. code-block:: bash
+
+    wget https://figshare.com/ndownloader/files/54720671?private_link=5f43c8fc6f157f3111e3 -O bloodhound.zip
+    unzip bloodhound.zip
+
+Run
+==================================
+
+.. code-block:: bash
+
+    bloodhound --checkpoint bloodhound.r226.ckpt --hmm-models-dir markers --output-csv GCA_000006945.csv --input GCA_000006945.2.fna
+
+
 Training
 ==================================
 
