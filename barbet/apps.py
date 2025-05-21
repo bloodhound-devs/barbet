@@ -185,7 +185,7 @@ class Barbet(TorchApp):
         self,
         module,
         genome_path:Path,
-        output_dir:Path=Param(help="A path to the output directory."),
+        output_dir:Path=Param("output", help="A path to the output directory."),
         cpus:int=Param(1, help="The number of CPUs to use to extract the single copy markers."),
         pfam_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm", help="The Pfam database to use."),
         tigr_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm", help="The TIGRFAM database to use."),
@@ -208,7 +208,7 @@ class Barbet(TorchApp):
         ####################
         # Extract single copy marker genes
         ####################
-        fastas = extract_single_copy_markers(
+        single_copy_marker_result = extract_single_copy_markers(
             genomes=genomes,
             out_dir=str(output_dir),
             cpus=cpus,
@@ -222,6 +222,8 @@ class Barbet(TorchApp):
         #######################
         embeddings = []
         accessions = []
+
+        fastas = single_copy_marker_result[genome_path.stem][domain]
 
         for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
             # read the fasta file sequence remove the header
@@ -326,7 +328,7 @@ class Barbet(TorchApp):
         self,
         input:list[Path]=Param(help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."),
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        output_dir:Path=Param(help="A path to the output directory."),
+        output_dir:Path=Param("output", help="A path to the output directory."),
         greedy_only:bool = True,
         **kwargs,
     ):
@@ -347,10 +349,11 @@ class Barbet(TorchApp):
         if len(files) == 0:
             raise ValueError(f"No files found in {input}. Please provide a directory or a list of files.")
 
-        # Check if output directory exists        
-        output_csv = Path(output_csv)
-        output_csv.parent.mkdir(exist_ok=True, parents=True)
-        console.print(f"Writing results for {len(files)} genomes to: {output_csv}")
+        # Check if output directory exists
+        if output_csv:
+            output_csv = Path(output_csv)
+            output_csv.parent.mkdir(exist_ok=True, parents=True)
+            console.print(f"Writing results for {len(files)} genomes to: {output_csv}")
 
         # Load the model
         module = self.load_checkpoint(**kwargs)
@@ -359,7 +362,7 @@ class Barbet(TorchApp):
         # Make predictions for each file
         total_df = None
         for file_index, file in enumerate(files):
-            prediction_dataloader = self.prediction_dataloader(module, input=file, **kwargs)
+            prediction_dataloader = self.prediction_dataloader(module, file, **kwargs)
             results = trainer.predict(module, dataloaders=prediction_dataloader)
             results = torch.cat(results, dim=0)
             results_df = self.output_results(results, file, **kwargs)
@@ -368,10 +371,13 @@ class Barbet(TorchApp):
                 results_df = results_df[["name", "greedy_prediction", "probability"]]
 
             if total_df is None:
-                results_df.to_csv(output_csv)
                 total_df = results_df
+                if output_csv:
+                    results_df.to_csv(output_csv, index=False)
             else:
-                total_df = pd.concat([total_df, results_df], axis=0)
-                results_df.to_csv(output_csv, mode='a', header=False)
+                total_df = pd.concat([total_df, results_df], axis=0).reset_index()
+
+                if output_csv:
+                    results_df.to_csv(output_csv, mode='a', header=False, index=False)
 
         return total_df

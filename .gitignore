@@ -177,3 +177,4 @@ MAG-GUT840*
 out/
 .DS_Store
 tests/data/weights-epoch=69-valid_loss=0.28.ckpt
+output/
