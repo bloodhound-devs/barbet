@@ -169,25 +169,39 @@ class Barbet(TorchApp):
         input:Path=Param(help="A path to a directory of fasta files or a single fasta file."),
         out_dir:Path=Param(help="A path to the output directory."),
         hmm_models_dir:Path=Param(help="A path to the HMM models directory containing the Pfam and TIGRFAM HMMs."),
-        torch_hub:Path=Param(help="The path to the Torch Hub directory", envvar="TORCH_HOME"),
-        memmap_array:Path=None, # TODO explain
-        memmap_index:Path=None, # TODO explain
+        tmp_dir:Path=Param(help="A path to a directory to store temporary files. If not provided, a temporary directory will be created."),
+        memmap_array:Path=Param(
+            None,
+            help=(
+                "A path to store the embeddings as a NumPy memmap array. If the file exists, this embeddings in this file will be used unless ``force embed`` is set to True. "
+                "If the file does not exist, then the embeddings will be generated and saved at this file path. "
+                "If not provided, a temporary path will be created."
+            ),
+        ),  
+        memmap_index:Path=Param(
+            None,
+            help=(
+                "A path to store the index of the embeddings in the NumPy memmap array. This should be provided if the memmap_array is provided."
+            ),
+        ),  
+        force_embed:bool=Param(
+            False,
+            help=(
+                "If True, the embeddings will be generated and saved at the memmap_array path even if the file exists. "
+                "If False, the embeddings will be loaded from the memmap_array path if it exists."
+            ),
+        ),
         extension='fa',
-        prefix:str="gtdbtk",
         cpus:int=1,
-        batch_size:int = 64,
+        batch_size:int = Param(64, help="The batch size for the prediction dataloader."),
         num_workers: int = 0,
-        force_embed:bool=False,
         repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
         **kwargs,
     ) -> Iterable:        
-        # Get hyperparameters from checkpoint
-        # esm_layers = ESMLayers.from_value(module.hparams.get('esm_layers', module.hparams.embedding_model.layers))
-        # embedding_model = module.hparams.embedding_model
-        # embedding_model.setup(layers = esm_layers, hub_dir=torch_hub) # HACK
-        
+        # Get hyperparameters from checkpoint        
         seq_count = module.hparams.get('seq_count', 32)
         self.classification_tree = module.hparams.classification_tree
+
         genomes = dict()
         input = Path(input)
         if input.is_dir():
