@@ -18,7 +18,7 @@ from rich.progress import track
 import pandas as pd
 from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
-from torchapp import Param, method, TorchApp
+from torchapp import TorchApp, Param, method, main
 
 from barbet.markers import extract_single_copy_markers
 from .models import BarbetModel
@@ -31,37 +31,11 @@ console = Console()
 class ImageFormat(str, Enum):
     """ The image format to use for the output images. """
     NONE = ""
-
-    # Image formats
     PNG = "png"
     JPG = "jpg"
-    JPEG = "jpeg"
-    GIF = "gif"
-    BMP = "bmp"
-    TIFF = "tiff"
-
-    # Vector graphics
-    PDF = "pdf"
     SVG = "svg"
-    EPS = "eps"
-    PS = "ps"
-    FIG = "fig"
-    CGM = "cgm"
-
-    # Interactive / Web
-    SVGZ = "svgz"
-    IMAP = "imap"
-    CMAPX = "cmapx"
-    XDOT = "xdot"
-
-    # Data formats
+    PDF = "pdf"
     DOT = "dot"
-    PLAIN = "plain"
-    PLAIN_EXT = "plain-ext"
-
-    # 3D and others
-    VRML = "vrml"
-    XLIB = "xlib"
 
     def __str__(self):
         return self.value
@@ -212,31 +186,9 @@ class Barbet(TorchApp):
         module,
         genome_path:Path,
         output_dir:Path=Param(help="A path to the output directory."),
-        hmm_models_dir:Path=Param(help="A path to the HMM models directory containing the Pfam and TIGRFAM HMMs."),
-        tmp_dir:Path=Param(help="A path to a directory to store temporary files. If not provided, a temporary directory will be created."),
-        memmap_array:Path=Param(
-            None,
-            help=(
-                "A path to store the embeddings as a NumPy memmap array. If the file exists, this embeddings in this file will be used unless ``force embed`` is set to True. "
-                "If the file does not exist, then the embeddings will be generated and saved at this file path. "
-                "If not provided, a temporary path will be created."
-            ),
-        ),  
-        memmap_index:Path=Param(
-            None,
-            help=(
-                "A path to store the index of the embeddings in the NumPy memmap array. This should be provided if the memmap_array is provided."
-            ),
-        ),  
-        force_embed:bool=Param(
-            False,
-            help=(
-                "If True, the embeddings will be generated and saved at the memmap_array path even if the file exists. "
-                "If False, the embeddings will be loaded from the memmap_array path if it exists."
-            ),
-        ),
-        extension='fa',
-        cpus:int=1,
+        cpus:int=Param(1, help="The number of CPUs to use to extract the single copy markers."),
+        pfam_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm", help="The Pfam database to use."),
+        tigr_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm", help="The TIGRFAM database to use."),
         batch_size:int = Param(64, help="The batch size for the prediction dataloader."),
         num_workers: int = 0,
         repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
@@ -249,63 +201,45 @@ class Barbet(TorchApp):
         genomes = dict()
         genomes[genome_path.stem] = str(genome_path)
 
-        memmap_array_path = memmap_array
-        if memmap_array_path and memmap_array_path.exists() and memmap_index and memmap_index.exists() and not force_embed:
-            print(f"Loading memmap")
-            accessions = memmap_index.read_text().strip().split("\n")
-            embeddings = read_memmap(memmap_array_path, len(accessions))
-        else:
-            # TODO: figure out the best way to set this e.g. use the number of ar53 vs bac120 genes found 
-            # or use extract it from the barbet model
-            domain = "bac120"
-            # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
+        # or use extract it from the barbet model
+        domain = "bac120"
+        # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
 
-            ####################
-            # Extract single copy marker genes
-            ####################
-            fastas = extract_single_copy_markers(
-                genomes=genomes,
-                out_dir=str(output_dir),
-                cpus=cpus,
-                force=True,
-                pfam_db=hmm_models_dir / "pfam" / "Pfam-A.hmm",
-                tigr_db=hmm_models_dir / "tigrfam" / "tigrfam.hmm",
-            )
+        ####################
+        # Extract single copy marker genes
+        ####################
+        fastas = extract_single_copy_markers(
+            genomes=genomes,
+            out_dir=str(output_dir),
+            cpus=cpus,
+            force=True,
+            pfam_db=self.process_location(pfam_db),
+            tigr_db=self.process_location(tigr_db),
+        )
         
-            #######################
-            # Create Embeddings
-            #######################
-            for genome in genomes:
-                fastas = fastas[genome][domain]
-                embeddings = []
-                accessions = []
+        #######################
+        # Create Embeddings
+        #######################
+        embeddings = []
+        accessions = []
 
-                for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
-                    # read the fasta file sequence remove the header
-                    fasta = Path(fasta)
-                    seq = fasta.read_text().split("\n")[1]
-                    vector = module.hparams.embedding_model(seq)
-                    if vector is not None and not torch.isnan(vector).any():
-                        vector = vector.cpu().detach().clone().numpy()
-                        embeddings.append(vector)
+        for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
+            # read the fasta file sequence remove the header
+            fasta = Path(fasta)
+            seq = fasta.read_text().split("\n")[1]
+            vector = module.hparams.embedding_model(seq)
+            if vector is not None and not torch.isnan(vector).any():
+                vector = vector.cpu().detach().clone().numpy()
+                embeddings.append(vector)
 
-                        gene_family_id = fasta.stem
-                        accession = f"{genome}/{gene_family_id}"
-                        accessions.append(accession)
+                gene_family_id = fasta.stem
+                accession = f"{genome_path.stem}/{gene_family_id}"
+                accessions.append(accession)
 
-                    del vector        
+            del vector        
 
-                embeddings = np.asarray(embeddings).astype(np.float16)
-            if memmap_array_path is not None and memmap_index is not None:
-                memmap_array_path.parent.mkdir(exist_ok=True, parents=True)
-                memmap_array = np.memmap(memmap_array_path, dtype=embeddings.dtype, mode='w+', shape=embeddings.shape)
-                memmap_array[:] = embeddings[:,:]
-                memmap_array.flush()
-                
-                memmap_index.parent.mkdir(exist_ok=True, parents=True)
-                memmap_index.write_text("\n".join(accessions))
+        embeddings = np.asarray(embeddings).astype(np.float16)
 
-        # Copy memmap for gene family into output memmap
         self.prediction_dataset = BarbetPredictionDataset(
             array=embeddings, 
             accessions=accessions,
