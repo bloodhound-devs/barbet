@@ -14,7 +14,7 @@ class MockPredictionTrainer():
             torch.zeros( (32, 5) ),
             torch.zeros( (32, 5) ),
         ]
-        result[0][0, -1] = 1
+        result[0][:, -1] = 1
         return result
 
 
@@ -47,12 +47,26 @@ class MockCheckpoint:
     
 
 @pytest.mark.parametrize("k", [1,2])
-def test_predict(k):
+def test_predict(k, tmp_path):
     barbet = Barbet()
     # mock checkpoint
     barbet.load_checkpoint = lambda *args, **kwargs: MockCheckpoint()
     barbet.prediction_trainer = lambda *args, **kwargs: MockPredictionTrainer()
-    results = barbet(input=[TEST_DATA_DIR/"MAG-GUT41.fa.gz"] * k)
+
+    output_dir = tmp_path / "output"
+    results = barbet(input=[TEST_DATA_DIR/"MAG-GUT41.fa.gz"] * k, output_dir=output_dir, image_format="dot")
+    
+    # Check output directory
+    assert output_dir.exists()    
+    assert (output_dir / "MAG-GUT41.fa").exists()
+    assert (output_dir / "MAG-GUT41.fa" / "pfam.tblout").exists()
+
+    # Check image files
+    image_file = (output_dir / "MAG-GUT41.fa.gz.dot")
+    assert image_file.exists()
+    assert 'root" -> "A" [label=0.18' in image_file.read_text()
+    
+    # Check result df
     assert len(results) == k
     assert 'name' in results.columns
     assert 'greedy_prediction' in results.columns
@@ -60,5 +74,5 @@ def test_predict(k):
     for _, row in results.iterrows():
         assert "MAG-GUT41.fa.gz" in row['name']
         assert row['greedy_prediction'] == 'E'
-        assert 0.2 < row['probability'] < 0.25
+        assert 0.29 < row['probability'] < 0.30
         

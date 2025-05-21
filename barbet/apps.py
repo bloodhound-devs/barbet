@@ -264,6 +264,7 @@ class Barbet(TorchApp):
         self, 
         results, 
         genome_path:Path,
+        output_dir:Path=Param("output", help="A path to the output directory."),        
         threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
         image_format: ImageFormat = Param(default="", help="A path to output the results as images."),
         image_threshold:float = 0.005,
@@ -312,7 +313,7 @@ class Barbet(TorchApp):
         if image_format:
             console.print(f"Writing inference probability renders to: {output_dir}")
             output_dir = Path(output_dir)
-            image_paths = [output_dir/f"{name}.{image_format}" for name in results_df["name"]]
+            image_paths = [output_dir/f"{genome_path.name}.{image_format}"]
             render_probabilities(
                 root=self.classification_tree, 
                 filepaths=image_paths,
@@ -328,7 +329,6 @@ class Barbet(TorchApp):
         self,
         input:list[Path]=Param(help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."),
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        output_dir:Path=Param("output", help="A path to the output directory."),
         greedy_only:bool = True,
         **kwargs,
     ):
