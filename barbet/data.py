@@ -2,6 +2,7 @@ import random
 import os
 import numpy as np
 from collections import defaultdict
+from typing import Iterable
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -40,6 +41,9 @@ class BarbetStack():
     species:str
     array_indices:np.array
 
+    def __post_init__(self):
+        assert self.array_indices.ndim == 1, "Stack indices must be a 1D array"
+
 
 @dataclass(kw_only=True)
 class BarbetPredictionDataset(Dataset):
@@ -75,9 +79,7 @@ class BarbetPredictionDataset(Dataset):
                 to_add_set = set(to_add)
                 assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
 
-                new_stack = sorted(remainder + to_add)
-                stack_indices.append(new_stack)
-
+                self.add_stack(species, remainder + to_add)
                 remainder = list(species_array_indices_set - to_add_set)
                 random.shuffle(remainder)
 
@@ -86,11 +88,17 @@ class BarbetPredictionDataset(Dataset):
                     break
 
                 while len(remainder) >= self.seq_count:
-                    stack_indices.append( remainder[:self.seq_count] )
+                    self.add_stack(species, remainder[:self.seq_count])
                     remainder = remainder[self.seq_count:]
                             
-            stack = BarbetStack(species=species, array_indices=stack_indices)
-            self.stacks.append(stack)
+    def add_stack(self, species:str, indices:Iterable[int]) -> BarbetStack:
+        """
+        Add a new stack to the dataset.
+        """
+        indices = np.array(sorted(indices))
+        stack = BarbetStack(species=species, array_indices=indices)
+        self.stacks.append(stack)
+        return stack
 
     def __len__(self):
         return len(self.stacks)

@@ -1,20 +1,17 @@
 from typing import Type, TYPE_CHECKING
-import numpy as np
 from pathlib import Path
 from enum import Enum
 from collections import defaultdict
-import lightning as L
-from torchmetrics import Metric
-from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
-from hierarchicalsoftmax import TreeDict
-from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
 from collections.abc import Iterable
 from rich.console import Console
-
 from rich.progress import track
-from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
-
+import numpy as np
+import lightning as L
+from torchmetrics import Metric
 from torchapp import TorchApp, Param, method, main
+from hierarchicalsoftmax import TreeDict, HierarchicalSoftmaxLoss, SoftmaxNode
+from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
+from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 
 from barbet.markers import extract_single_copy_markers
 from .models import BarbetModel
