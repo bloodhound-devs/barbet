@@ -1,26 +1,18 @@
-from typing import Type, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from pathlib import Path
 from enum import Enum
 from collections import defaultdict
-from collections.abc import Iterable
 from rich.console import Console
 from rich.progress import track
-import numpy as np
-import lightning as L
-from torchmetrics import Metric
 from torchapp import TorchApp, Param, method, main
-from hierarchicalsoftmax import TreeDict, HierarchicalSoftmaxLoss, SoftmaxNode
-from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
-from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 
-from barbet.markers import extract_single_copy_markers
-from .models import BarbetModel
-from .data import read_memmap, RANKS, BarbetDataModule, BarbetPredictionDataset
-from .embeddings.esm import ESMEmbedding
 
 if TYPE_CHECKING:
-    import torch
+    from collections.abc import Iterable
+    from torchmetrics import Metric
+    from hierarchicalsoftmax import SoftmaxNode
     from torch import nn
+    import lightning as L
     import pandas as pd
 
 
@@ -60,7 +52,11 @@ class Barbet(TorchApp):
             raise ValueError("memmap is required")
         if not memmap_index:
             raise ValueError("memmap_index is required")        
-
+        
+        from hierarchicalsoftmax import TreeDict
+        import numpy as np
+        from barbet.data import read_memmap
+        
         print(f"Loading treedict {treedict}")
         individual_treedict = TreeDict.load(treedict)
         self.treedict = TreeDict(classification_tree=individual_treedict.classification_tree)
@@ -70,7 +66,7 @@ class Barbet(TorchApp):
             for tip in self.treedict.classification_tree.leaves:
                 tip.parent.alpha = tip_alpha
 
-        print(f"Loading memmap")
+        print("Loading memmap")
         self.accession_to_array_index = defaultdict(list)
         with open(memmap_index) as f:
             for key_index, key in enumerate(f):
@@ -107,6 +103,8 @@ class Barbet(TorchApp):
         growth_factor:float=2.0,
         attention_size:int=512,
     ) -> 'nn.Module':
+        from barbet.models import BarbetModel
+
         return BarbetModel(
             classification_tree=self.classification_tree,
             features=features,
@@ -125,10 +123,15 @@ class Barbet(TorchApp):
         #     return prediction[0,0] * 0.0
         #     # return prediction.mean() * 0.0
         # return dummy_loss # hack
+        from hierarchicalsoftmax import HierarchicalSoftmaxLoss
+
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
     
     @method    
-    def metrics(self) -> list[tuple[str,Metric]]:
+    def metrics(self) -> 'list[tuple[str,Metric]]':
+        from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
+        from barbet.data import RANKS
+
         rank_accuracy = RankAccuracyTorchMetric(
             root=self.classification_tree, 
             ranks={1+i:rank for i, rank in enumerate(RANKS)},
@@ -146,7 +149,9 @@ class Barbet(TorchApp):
         test_partition:int=-1,
         seq_count:int=32,
         train_all:bool = False,
-    ) -> Iterable|L.LightningDataModule:
+    ) -> 'Iterable|L.LightningDataModule':
+        from barbet.data import BarbetDataModule
+
         return BarbetDataModule(
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
@@ -164,7 +169,9 @@ class Barbet(TorchApp):
     @method
     def extra_hyperparameters(self, embedding_model:str="") -> dict:
         """ Extra hyperparameters to save with the module. """
-        assert embedding_model, f"Please provide an embedding model."
+        assert embedding_model, "Please provide an embedding model."
+        from barbet.embeddings.esm import ESMEmbedding
+        
         embedding_model = embedding_model.lower()
         if embedding_model.startswith("esm"):
             layers = embedding_model[3:].strip()
@@ -191,9 +198,12 @@ class Barbet(TorchApp):
         num_workers: int = 0,
         repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
         **kwargs,
-    ) -> Iterable:        
+    ) -> 'Iterable':        
         import torch
+        import numpy as np
         from torch.utils.data import DataLoader
+        from barbet.markers import extract_single_copy_markers
+        from barbet.data import BarbetPredictionDataset
 
         # Get hyperparameters from checkpoint        
         seq_count = module.hparams.get('seq_count', 32)
@@ -254,7 +264,7 @@ class Barbet(TorchApp):
 
         return dataloader
 
-    def node_to_str(self, node:SoftmaxNode) -> str:
+    def node_to_str(self, node: 'SoftmaxNode') -> str:
         """ 
         Converts the node to a string
         """
@@ -273,6 +283,7 @@ class Barbet(TorchApp):
     ) -> 'pd.DataFrame':
         import torch
         import pandas as pd
+        from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
 
         assert self.classification_tree
         assert self.classification_tree.layer_size == results.shape[-1]
