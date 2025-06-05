@@ -184,7 +184,6 @@ class Barbet(TorchApp):
         self,
         module,
         genome_path:Path,
-        output_dir:Path=Param("output", help="A path to the output directory."),
         cpus:int=Param(1, help="The number of CPUs to use to extract the single copy markers."),
         pfam_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm", help="The Pfam database to use."),
         tigr_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm", help="The TIGRFAM database to use."),
@@ -212,7 +211,7 @@ class Barbet(TorchApp):
         ####################
         single_copy_marker_result = extract_single_copy_markers(
             genomes=genomes,
-            out_dir=str(output_dir),
+            out_dir=str(self.output_dir),
             cpus=cpus,
             force=True,
             pfam_db=self.process_location(pfam_db),
@@ -334,7 +333,9 @@ class Barbet(TorchApp):
     def predict(
         self,
         input:list[Path]=Param(help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."),
+        output_dir:Path=Param("output", help="A path to the output directory."),
         output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
+        overwrite:bool=False,
         greedy_only:bool = True,
         **kwargs,
     ):
@@ -359,10 +360,21 @@ class Barbet(TorchApp):
             raise ValueError(f"No files found in {input}. Please provide a directory or a list of files.")
 
         # Check if output directory exists
-        if output_csv:
-            output_csv = Path(output_csv)
-            output_csv.parent.mkdir(exist_ok=True, parents=True)
-            console.print(f"Writing results for {len(files)} genomes to: {output_csv}")
+        self.output_dir = Path(output_dir)
+        output_csv = output_csv or self.output_dir/"barbet-predictions.csv"
+        output_csv = Path(output_csv)
+        output_csv.parent.mkdir(exist_ok=True, parents=True)
+        if output_csv.exists() and not overwrite:
+            file_index = 1
+            base = output_csv.stem
+            ext = output_csv.suffix
+            while True:
+                candidate = output_csv.parent / f"{base}_{file_index}{ext}"
+                if not candidate.exists():
+                    output_csv = candidate
+                    break
+                file_index += 1
+        console.print(f"Writing results for {len(files)} genome{'s' if len(files) > 1 else ''} to '{output_csv}'")
 
         # Load the model
         module = self.load_checkpoint(**kwargs)
@@ -389,4 +401,6 @@ class Barbet(TorchApp):
                 if output_csv:
                     results_df.to_csv(output_csv, mode='a', header=False, index=False)
 
+        console.print(total_df[["name", "greedy_prediction", "probability"]])
+        console.print(f"Saved to: '{output_csv}'")
         return total_df
