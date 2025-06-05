@@ -20,7 +20,8 @@ console = Console()
 
 
 class ImageFormat(str, Enum):
-    """ The image format to use for the output images. """
+    """The image format to use for the output images."""
+
     NONE = ""
     PNG = "png"
     JPG = "jpg"
@@ -32,7 +33,7 @@ class ImageFormat(str, Enum):
         return self.value
 
     def __bool__(self) -> bool:
-        """ Returns True if the image format is not empty. """
+        """Returns True if the image format is not empty."""
         return self.value != ""
 
 
@@ -40,26 +41,28 @@ class Barbet(TorchApp):
     @method
     def setup(
         self,
-        memmap:str=None,
-        memmap_index:str=None,
-        treedict:str=None,
-        in_memory:bool=False,
-        tip_alpha:float=None,
+        memmap: str = None,
+        memmap_index: str = None,
+        treedict: str = None,
+        in_memory: bool = False,
+        tip_alpha: float = None,
     ) -> None:
         if not treedict:
             raise ValueError("treedict is required")
         if not memmap:
             raise ValueError("memmap is required")
         if not memmap_index:
-            raise ValueError("memmap_index is required")        
-        
+            raise ValueError("memmap_index is required")
+
         from hierarchicalsoftmax import TreeDict
         import numpy as np
         from barbet.data import read_memmap
-        
+
         print(f"Loading treedict {treedict}")
         individual_treedict = TreeDict.load(treedict)
-        self.treedict = TreeDict(classification_tree=individual_treedict.classification_tree)
+        self.treedict = TreeDict(
+            classification_tree=individual_treedict.classification_tree
+        )
 
         # Sets the loss weighting for the tips
         if tip_alpha:
@@ -93,16 +96,18 @@ class Barbet(TorchApp):
             gene_id = accession.split("/")[-1]
             family_ids.add(gene_id)
 
-        self.gene_id_dict = {family_id:index for index, family_id in enumerate(sorted(family_ids))}
+        self.gene_id_dict = {
+            family_id: index for index, family_id in enumerate(sorted(family_ids))
+        }
 
     @method
     def model(
         self,
-        features:int=768,
-        intermediate_layers:int=2,
-        growth_factor:float=2.0,
-        attention_size:int=512,
-    ) -> 'nn.Module':
+        features: int = 768,
+        intermediate_layers: int = 2,
+        growth_factor: float = 2.0,
+        attention_size: int = 512,
+    ) -> "nn.Module":
         from barbet.models import BarbetModel
 
         return BarbetModel(
@@ -112,11 +117,11 @@ class Barbet(TorchApp):
             growth_factor=growth_factor,
             attention_size=attention_size,
         )
-    
+
     # @method
     # def input_count(self) -> int:
     #     return 1
-            
+
     @method
     def loss_function(self):
         # def dummy_loss(prediction, target):
@@ -126,30 +131,30 @@ class Barbet(TorchApp):
         from hierarchicalsoftmax import HierarchicalSoftmaxLoss
 
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
-    
-    @method    
-    def metrics(self) -> 'list[tuple[str,Metric]]':
+
+    @method
+    def metrics(self) -> "list[tuple[str,Metric]]":
         from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
         from barbet.data import RANKS
 
         rank_accuracy = RankAccuracyTorchMetric(
-            root=self.classification_tree, 
-            ranks={1+i:rank for i, rank in enumerate(RANKS)},
+            root=self.classification_tree,
+            ranks={1 + i: rank for i, rank in enumerate(RANKS)},
         )
-                
-        return [('rank_accuracy', rank_accuracy)]
-    
-    @method    
+
+        return [("rank_accuracy", rank_accuracy)]
+
+    @method
     def data(
         self,
-        max_items:int=0,
-        num_workers:int=4,
-        validation_partition:int=0,
-        batch_size:int = 4,
-        test_partition:int=-1,
-        seq_count:int=32,
-        train_all:bool = False,
-    ) -> 'Iterable|L.LightningDataModule':
+        max_items: int = 0,
+        num_workers: int = 4,
+        validation_partition: int = 0,
+        batch_size: int = 4,
+        test_partition: int = -1,
+        seq_count: int = 32,
+        train_all: bool = False,
+    ) -> "Iterable|L.LightningDataModule":
         from barbet.data import BarbetDataModule
 
         return BarbetDataModule(
@@ -165,13 +170,13 @@ class Barbet(TorchApp):
             seq_count=seq_count,
             train_all=train_all,
         )
-    
+
     @method
-    def extra_hyperparameters(self, embedding_model:str="") -> dict:
-        """ Extra hyperparameters to save with the module. """
+    def extra_hyperparameters(self, embedding_model: str = "") -> dict:
+        """Extra hyperparameters to save with the module."""
         assert embedding_model, "Please provide an embedding model."
         from barbet.embeddings.esm import ESMEmbedding
-        
+
         embedding_model = embedding_model.lower()
         if embedding_model.startswith("esm"):
             layers = embedding_model[3:].strip()
@@ -185,28 +190,41 @@ class Barbet(TorchApp):
             classification_tree=self.treedict.classification_tree,
             gene_id_dict=self.gene_id_dict,
         )
-    
+
     @method
     def prediction_dataloader(
         self,
         module,
-        genome_path:Path,
-        cpus:int=Param(1, help="The number of CPUs to use to extract the single copy markers."),
-        pfam_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm", help="The Pfam database to use."),
-        tigr_db:str=Param("https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm", help="The TIGRFAM database to use."),
-        batch_size:int = Param(64, help="The batch size for the prediction dataloader."),
+        genome_path: Path,
+        cpus: int = Param(
+            1, help="The number of CPUs to use to extract the single copy markers."
+        ),
+        pfam_db: str = Param(
+            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm",
+            help="The Pfam database to use.",
+        ),
+        tigr_db: str = Param(
+            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm",
+            help="The TIGRFAM database to use.",
+        ),
+        batch_size: int = Param(
+            64, help="The batch size for the prediction dataloader."
+        ),
         num_workers: int = 0,
-        repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
+        repeats: int = Param(
+            2,
+            help="The minimum number of times to use each protein embedding in the prediction.",
+        ),
         **kwargs,
-    ) -> 'Iterable':        
+    ) -> "Iterable":
         import torch
         import numpy as np
         from torch.utils.data import DataLoader
         from barbet.markers import extract_single_copy_markers
         from barbet.data import BarbetPredictionDataset
 
-        # Get hyperparameters from checkpoint        
-        seq_count = module.hparams.get('seq_count', 32)
+        # Get hyperparameters from checkpoint
+        seq_count = module.hparams.get("seq_count", 32)
         self.classification_tree = module.hparams.classification_tree
 
         genomes = dict()
@@ -227,7 +245,7 @@ class Barbet(TorchApp):
             pfam_db=self.process_location(pfam_db),
             tigr_db=self.process_location(tigr_db),
         )
-        
+
         #######################
         # Create Embeddings
         #######################
@@ -236,7 +254,9 @@ class Barbet(TorchApp):
 
         fastas = single_copy_marker_result[genome_path.stem][domain]
 
-        for fasta in track(fastas, description="[cyan]Embedding...  ", total=len(fastas)):
+        for fasta in track(
+            fastas, description="[cyan]Embedding...  ", total=len(fastas)
+        ):
             # read the fasta file sequence remove the header
             fasta = Path(fasta)
             seq = fasta.read_text().split("\n")[1]
@@ -249,40 +269,53 @@ class Barbet(TorchApp):
                 accession = f"{genome_path.stem}/{gene_family_id}"
                 accessions.append(accession)
 
-            del vector        
+            del vector
 
         embeddings = np.asarray(embeddings).astype(np.float16)
 
         self.prediction_dataset = BarbetPredictionDataset(
-            array=embeddings, 
+            array=embeddings,
             accessions=accessions,
             seq_count=seq_count,
             repeats=repeats,
             seed=42,
         )
-        dataloader = DataLoader(self.prediction_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        dataloader = DataLoader(
+            self.prediction_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=False,
+        )
 
         return dataloader
 
-    def node_to_str(self, node: 'SoftmaxNode') -> str:
-        """ 
+    def node_to_str(self, node: "SoftmaxNode") -> str:
+        """
         Converts the node to a string
         """
         return str(node).split(",")[-1].strip()
-    
+
     @method
     def output_results(
-        self, 
-        results, 
-        genome_path:Path,
-        threshold:float = Param(default=0.0, help="The threshold value for making hierarchical predictions."),
-        image_format: ImageFormat = Param(default="", help="A path to output the results as images."),
-        image_threshold:float = 0.005,
+        self,
+        results,
+        genome_path: Path,
+        threshold: float = Param(
+            default=0.0, help="The threshold value for making hierarchical predictions."
+        ),
+        image_format: ImageFormat = Param(
+            default="", help="A path to output the results as images."
+        ),
+        image_threshold: float = 0.005,
         **kwargs,
-    ) -> 'pd.DataFrame':
+    ) -> "pd.DataFrame":
         import torch
         import pandas as pd
-        from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
+        from hierarchicalsoftmax.inference import (
+            node_probabilities,
+            greedy_predictions,
+            render_probabilities,
+        )
 
         assert self.classification_tree
         assert self.classification_tree.layer_size == results.shape[-1]
@@ -290,25 +323,32 @@ class Barbet(TorchApp):
         # Average results across all stacks
         results = results.mean(axis=0, keepdims=True)
 
-        classification_probabilities = node_probabilities(results, root=self.classification_tree)
-        
-        node_list = self.classification_tree.node_list_softmax
-        category_names = [self.node_to_str(node) for node in node_list if not node.is_root]
+        classification_probabilities = node_probabilities(
+            results, root=self.classification_tree
+        )
 
-        results_df = pd.DataFrame(classification_probabilities.numpy(), columns=category_names)
-        
-        classification_probabilities = torch.as_tensor(results_df[category_names].to_numpy()) 
+        node_list = self.classification_tree.node_list_softmax
+        category_names = [
+            self.node_to_str(node) for node in node_list if not node.is_root
+        ]
+
+        results_df = pd.DataFrame(
+            classification_probabilities.numpy(), columns=category_names
+        )
+
+        classification_probabilities = torch.as_tensor(
+            results_df[category_names].to_numpy()
+        )
 
         # get greedy predictions which can use the raw activation or the softmax probabilities
         predictions = greedy_predictions(
-            classification_probabilities, 
-            root=self.classification_tree, 
+            classification_probabilities,
+            root=self.classification_tree,
             threshold=threshold,
         )
 
-        results_df['greedy_prediction'] = [
-            self.node_to_str(node)
-            for node in predictions
+        results_df["greedy_prediction"] = [
+            self.node_to_str(node) for node in predictions
         ]
 
         def get_prediction_probability(row):
@@ -316,21 +356,25 @@ class Barbet(TorchApp):
             if prediction in row:
                 return row[prediction]
             return 1.0
-        
-        results_df['probability'] = results_df.apply(get_prediction_probability, axis=1)
+
+        results_df["probability"] = results_df.apply(get_prediction_probability, axis=1)
 
         results_df["name"] = [str(genome_path)]
 
         # Reorder columns
-        results_df = results_df[["name", "greedy_prediction", "probability" ] + category_names]
+        results_df = results_df[
+            ["name", "greedy_prediction", "probability"] + category_names
+        ]
 
         # Output images
         if image_format:
-            console.print(f"Writing inference probability renders to: {self.output_dir}")
+            console.print(
+                f"Writing inference probability renders to: {self.output_dir}"
+            )
             output_dir = Path(self.output_dir)
-            image_paths = [output_dir/f"{genome_path.name}.{image_format}"]
+            image_paths = [output_dir / f"{genome_path.name}.{image_format}"]
             render_probabilities(
-                root=self.classification_tree, 
+                root=self.classification_tree,
                 filepaths=image_paths,
                 probabilities=classification_probabilities,
                 predictions=predictions,
@@ -339,17 +383,26 @@ class Barbet(TorchApp):
 
         return results_df
 
-    @main("load_checkpoint", "prediction_trainer", "prediction_dataloader", "output_results")
+    @main(
+        "load_checkpoint",
+        "prediction_trainer",
+        "prediction_dataloader",
+        "output_results",
+    )
     def predict(
         self,
-        input:list[Path]=Param(help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."),
-        output_dir:Path=Param("output", help="A path to the output directory."),
-        output_csv: Path = Param(default=None, help="A path to output the results as a CSV."),
-        overwrite:bool=False,
-        greedy_only:bool = True,
+        input: list[Path] = Param(
+            help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."
+        ),
+        output_dir: Path = Param("output", help="A path to the output directory."),
+        output_csv: Path = Param(
+            default=None, help="A path to output the results as a CSV."
+        ),
+        overwrite: bool = False,
+        greedy_only: bool = True,
         **kwargs,
     ):
-        """ Make predictions with the model. """
+        """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
         import torch
         import pandas as pd
 
@@ -360,18 +413,22 @@ class Barbet(TorchApp):
         assert len(input) > 0, "No input files provided."
         for path in input:
             if path.is_dir():
-                for file in path.rglob("*.fa") + path.rglob("*.fasta") + path.rglob("*.fna"):
+                for file in (
+                    path.rglob("*.fa") + path.rglob("*.fasta") + path.rglob("*.fna")
+                ):
                     files.append(file)
             elif path.is_file():
                 files.append(path)
 
         # Check if any files were found
         if len(files) == 0:
-            raise ValueError(f"No files found in {input}. Please provide a directory or a list of files.")
+            raise ValueError(
+                f"No files found in {input}. Please provide a directory or a list of files."
+            )
 
         # Check if output directory exists
         self.output_dir = Path(output_dir)
-        output_csv = output_csv or self.output_dir/"barbet-predictions.csv"
+        output_csv = output_csv or self.output_dir / "barbet-predictions.csv"
         output_csv = Path(output_csv)
         output_csv.parent.mkdir(exist_ok=True, parents=True)
         if output_csv.exists() and not overwrite:
@@ -384,7 +441,9 @@ class Barbet(TorchApp):
                     output_csv = candidate
                     break
                 file_index += 1
-        console.print(f"Writing results for {len(files)} genome{'s' if len(files) > 1 else ''} to '{output_csv}'")
+        console.print(
+            f"Writing results for {len(files)} genome{'s' if len(files) > 1 else ''} to '{output_csv}'"
+        )
 
         # Load the model
         module = self.load_checkpoint(**kwargs)
@@ -409,7 +468,7 @@ class Barbet(TorchApp):
                 total_df = pd.concat([total_df, results_df], axis=0).reset_index()
 
                 if output_csv:
-                    results_df.to_csv(output_csv, mode='a', header=False, index=False)
+                    results_df.to_csv(output_csv, mode="a", header=False, index=False)
 
         console.print(total_df[["name", "greedy_prediction", "probability"]])
         console.print(f"Saved to: '{output_csv}'")
