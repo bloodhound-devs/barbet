@@ -16,7 +16,7 @@
 .. |coverage badge| image:: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/rbturnbull/09aad5114164b54daabe1f5efd02a009/raw/coverage-badge.json
     :target: https://bloodhound-devs.github.io/barbet/coverage/
 
-.. |torchapp badge| image:: https://img.shields.io/badge/MLOpps-torchapp-B1230A.svg
+.. |torchapp badge| image:: https://img.shields.io/badge/torch-app-B1230A.svg
     :target: https://rbturnbull.github.io/torchapp/
     
 .. end-badges
@@ -56,7 +56,7 @@ Credits
 
 .. start-credits
 
-Robert Turnbull, Mar Quiroga, Gabriele Marini, Torsten Seemann,  Wytamma Wirth
+`Robert Turnbull <https://robturnbull.com>`_, Mar Quiroga, Gabriele Marini, Torsten Seemann, Wytamma Wirth
 
 For more information contact: <wytamma.wirth@unimelb.edu.au>
 

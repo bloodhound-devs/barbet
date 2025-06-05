@@ -1,29 +1,28 @@
-import torch
-import numpy as np
+from typing import Type, TYPE_CHECKING
 from pathlib import Path
-from torch import nn
-import lightning as L
-from torchmetrics import Metric
-from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
-from hierarchicalsoftmax import TreeDict
-from hierarchicalsoftmax import HierarchicalSoftmaxLoss, SoftmaxNode
-from torch.utils.data import DataLoader
+from enum import Enum
+from collections import defaultdict
 from collections.abc import Iterable
 from rich.console import Console
-from enum import Enum
-
-from collections import defaultdict
 from rich.progress import track
-
-import pandas as pd
-from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
-
+import numpy as np
+import lightning as L
+from torchmetrics import Metric
 from torchapp import TorchApp, Param, method, main
+from hierarchicalsoftmax import TreeDict, HierarchicalSoftmaxLoss, SoftmaxNode
+from hierarchicalsoftmax.inference import node_probabilities, greedy_predictions, render_probabilities
+from hierarchicalsoftmax.metrics import RankAccuracyTorchMetric
 
 from barbet.markers import extract_single_copy_markers
 from .models import BarbetModel
 from .data import read_memmap, RANKS, BarbetDataModule, BarbetPredictionDataset
 from .embeddings.esm import ESMEmbedding
+
+if TYPE_CHECKING:
+    import torch
+    from torch import nn
+    import pandas as pd
+
 
 console = Console()
 
@@ -107,7 +106,7 @@ class Barbet(TorchApp):
         intermediate_layers:int=2,
         growth_factor:float=2.0,
         attention_size:int=512,
-    ) -> nn.Module:
+    ) -> 'nn.Module':
         return BarbetModel(
             classification_tree=self.classification_tree,
             features=features,
@@ -194,6 +193,9 @@ class Barbet(TorchApp):
         repeats:int = Param(2, help="The minimum number of times to use each protein embedding in the prediction."),
         **kwargs,
     ) -> Iterable:        
+        import torch
+        from torch.utils.data import DataLoader
+
         # Get hyperparameters from checkpoint        
         seq_count = module.hparams.get('seq_count', 32)
         self.classification_tree = module.hparams.classification_tree
@@ -269,7 +271,10 @@ class Barbet(TorchApp):
         image_format: ImageFormat = Param(default="", help="A path to output the results as images."),
         image_threshold:float = 0.005,
         **kwargs,
-    ) -> pd.DataFrame:
+    ) -> 'pd.DataFrame':
+        import torch
+        import pandas as pd
+
         assert self.classification_tree
         assert self.classification_tree.layer_size == results.shape[-1]
 
@@ -334,6 +339,9 @@ class Barbet(TorchApp):
         **kwargs,
     ):
         """ Make predictions with the model. """
+        import torch
+        import pandas as pd
+
         # Get list of files
         files = []
         if isinstance(input, (str, Path)):

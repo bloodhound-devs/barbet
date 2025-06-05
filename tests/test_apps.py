@@ -54,7 +54,7 @@ def test_predict(k, tmp_path):
     barbet.prediction_trainer = lambda *args, **kwargs: MockPredictionTrainer()
 
     output_dir = tmp_path / "output"
-    results = barbet(input=[TEST_DATA_DIR/"MAG-GUT41.fa.gz"] * k, output_dir=output_dir, image_format="dot")
+    results = barbet.predict(input=[TEST_DATA_DIR/"MAG-GUT41.fa.gz"] * k, output_dir=output_dir, image_format="dot")
     
     # Check output directory
     assert output_dir.exists()    
