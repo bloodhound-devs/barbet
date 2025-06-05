@@ -271,6 +271,7 @@ class Barbet(TorchApp):
         **kwargs,
     ) -> pd.DataFrame:
         assert self.classification_tree
+        assert self.classification_tree.layer_size == results.shape[-1]
 
         # Average results across all stacks
         results = results.mean(axis=0, keepdims=True)

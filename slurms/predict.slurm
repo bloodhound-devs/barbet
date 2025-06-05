@@ -25,9 +25,8 @@
 module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
-
-
 module load prodigal/2.6.3
+
 module load GCC/11.3.0
 module load OpenMPI/4.1.4
 module load HMMER/3.3.2
@@ -57,8 +56,8 @@ TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 CHECKPOINT=/home/rturnbull/wytamma/rob/barbet/logs/bac120-esm12-reps.st-b16f768l2g2e4lr0.0001ep20/version_0/checkpoints/checkpoint-epoch=07-valid_loss=6.8.ckpt
 barbet \
     --checkpoint $CHECKPOINT \
-    --out-dir outputs \
-    --sequence /data/gpfs/projects/punim2199/wytamma/dev/gambit/GCF_000145595.1.fna \
+    --output-dir outputs \
+    --input /data/gpfs/projects/punim2199/wytamma/dev/gambit/GCF_000145595.1.fna \
     --treedict $TREEDICT \
     --image-dir outputs/GCF_000145595.1-images \
     --output-csv outputs/GCF_000145595.1.csv \
@@ -67,8 +66,8 @@ barbet \
 
 barbet \
     --checkpoint $CHECKPOINT \
-    --out-dir outputs-GCA_001027105.1 \
-    --sequence /home/rturnbull/wytamma/rob/GCA_001027105.1_ASM102710v1_genomic.fna \
+    --output-dir outputs-GCA_001027105.1 \
+    --input /home/rturnbull/wytamma/rob/GCA_001027105.1_ASM102710v1_genomic.fna \
     --treedict $TREEDICT \
     --image-dir outputs-GCA_001027105.1/GCA_001027105.1-images \
     --output-csv outputs-GCA_001027105.1/GCA_001027105.1.csv \
