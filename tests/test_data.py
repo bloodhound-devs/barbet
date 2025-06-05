@@ -3,7 +3,14 @@ import numpy as np
 from barbet.data import BarbetPredictionDataset
 import pytest
 
-def test_prediction_dataloader():
+@pytest.mark.parametrize("embedding_size,species_count,gene_count,repeats,seq_count", [
+    (4, 2, 20, 1, 10),
+    (8, 3, 30, 2, 5),
+    (2, 1, 10, 1, 5),
+    (4, 4, 40, 4, 20),
+    (6, 2, 25, 1, 7),  # edge case where gene_count % seq_count ≠ 0
+])
+def test_prediction_dataloader(embedding_size, species_count, gene_count, repeats, seq_count):
     embedding_size = 4
     species_count = 2
     gene_count = 20
