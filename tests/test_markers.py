@@ -4,7 +4,7 @@ from pathlib import Path
 from barbet.markers import (
     run_prodigal,
     parse_domtblout_top_hits,
-    extract_single_copy_markers
+    extract_markers_genes
 )
 
 
@@ -72,7 +72,7 @@ def test_identify_single_copy_fasta_integration(tmp_path, monkeypatch):
     genome_fa = data_dir / "MAG-GUT41.fa.gz"
     assert genome_fa.exists()
 
-    out = extract_single_copy_markers(
+    out = extract_markers_genes(
         genomes={genome_fa.stem: str(genome_fa)},
         out_dir=str(tmp_path),
         cpus=2,
@@ -82,13 +82,13 @@ def test_identify_single_copy_fasta_integration(tmp_path, monkeypatch):
     )
 
     # should get one key per genome
-    stem = genome_fa.stem
-    assert stem in out, f"Expected genome '{stem}' in output"
+    genome_fa = str(genome_fa)
+    assert genome_fa in out, f"Expected genome '{genome_fa}' in output"
 
     # now for each domain under that genome, we must have some FASTAs
-    domains = out[stem]
+    domains = out[genome_fa]
     for domain in ("bac120", "ar53"):
-        assert domain in domains, f"Missing domain key '{domain}' in result for genome {stem}"
+        assert domain in domains, f"Missing domain key '{domain}' in result for genome {genome_fa}"
         fa_list = domains[domain]
         assert isinstance(fa_list, list), f"Expected a list for {domain}"
         assert len(fa_list) > 0, f"No FASTA files generated for {domain}"
