@@ -364,6 +364,7 @@ class Barbet(TorchApp):
     def predict(
         self,
         input: list[Path] = Param(
+            default=...,
             help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."
         ),
         output_dir: Path = Param("output", help="A path to the output directory."),
