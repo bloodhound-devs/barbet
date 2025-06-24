@@ -53,6 +53,7 @@ class BarbetPredictionDataset(Dataset):
     repeats:int = 2
     seed:int = 42
     stacks: list[BarbetStack] = field(init=False)
+    species_filter:set[str]|None = None
 
     def __post_init__(self):
         species_to_array_indices = defaultdict(set)
@@ -60,6 +61,8 @@ class BarbetPredictionDataset(Dataset):
             slash_position = accession.rfind("/")
             assert slash_position != -1
             species = accession[:slash_position]
+            if self.species_filter and species not in self.species_filter:
+                continue
             species_to_array_indices[species].add(index)
 
         # Build stacks

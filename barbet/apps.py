@@ -4,7 +4,7 @@ from enum import Enum
 from collections import defaultdict
 from rich.console import Console
 from rich.progress import track
-from torchapp import TorchApp, Param, method, main
+from torchapp import TorchApp, Param, method, main, tool
 
 
 if TYPE_CHECKING:
@@ -230,7 +230,7 @@ class Barbet(TorchApp):
         genomes = dict()
         genomes[genome_path.stem] = str(genome_path)
 
-        # or use extract it from the barbet model
+        # TODO extract domain from the barbet model
         domain = "bac120"
         # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
 
@@ -307,6 +307,7 @@ class Barbet(TorchApp):
             default="", help="A path to output the results as images."
         ),
         image_threshold: float = 0.005,
+        greedy_only: bool = True,
         **kwargs,
     ) -> "pd.DataFrame":
         import torch
@@ -381,6 +382,9 @@ class Barbet(TorchApp):
                 threshold=image_threshold,
             )
 
+        if greedy_only:
+            results_df = results_df[["name", "greedy_prediction", "probability"]]
+
         return results_df
 
     @main(
@@ -399,7 +403,6 @@ class Barbet(TorchApp):
             default=None, help="A path to output the results as a CSV."
         ),
         overwrite: bool = False,
-        greedy_only: bool = True,
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
@@ -457,9 +460,6 @@ class Barbet(TorchApp):
             results = torch.cat(results, dim=0)
             results_df = self.output_results(results, file, **kwargs)
 
-            if greedy_only:
-                results_df = results_df[["name", "greedy_prediction", "probability"]]
-
             if total_df is None:
                 total_df = results_df
                 if output_csv:
@@ -473,3 +473,97 @@ class Barbet(TorchApp):
         console.print(total_df[["name", "greedy_prediction", "probability"]])
         console.print(f"Saved to: '{output_csv}'")
         return total_df
+
+    @tool(
+        "load_checkpoint",
+        "prediction_trainer",
+        "prediction_dataloader_memmap",
+        "output_results",
+    )
+    def predict_memmap(
+        self,
+        output_csv: Path = Param(
+            default=None, help="A path to output the results as a CSV."
+        ),
+        **kwargs,
+    ):
+        """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
+        import torch
+
+        module = self.load_checkpoint(**kwargs)
+        trainer = self.prediction_trainer(module, **kwargs)
+        prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
+
+        results_list = trainer.predict(module, dataloaders=prediction_dataloader)
+
+        if not results_list:
+            return None
+
+        results = torch.cat(results_list, dim=0)
+        results_df = self.output_results(results, **kwargs)
+        results_df.to_csv(output_csv, index=False)
+        return results_df
+    
+    @method
+    def prediction_dataloader_memmap(
+        self,
+        module,
+        memmap:Path = None,
+        memmap_index:Path = None,
+
+        batch_size: int = Param(
+            64, help="The batch size for the prediction dataloader."
+        ),
+        num_workers: int = 0,
+        repeats: int = Param(
+            2,
+            help="The minimum number of times to use each protein embedding in the prediction.",
+        ),
+        treedict:Path=None,
+        treedict_partition:int=None,
+        **kwargs,
+    ) -> "Iterable":
+        from barbet.data import read_memmap
+        from torch.utils.data import DataLoader
+        from barbet.data import BarbetPredictionDataset
+        
+        accessions = memmap_index.read_text().strip().split("\n")
+        count = len(memmap_index)
+        array = read_memmap(memmap, count)
+
+        # Get hyperparameters from checkpoint
+        seq_count = module.hparams.get("seq_count", 32)
+        self.classification_tree = module.hparams.classification_tree
+
+        # If treedict is provided, then we filter the accessions to only those that are in the treedict
+        species_filter = None
+        if treedict is None and treedict_partition is not None:
+            print("If you provide a `treedict_partition` then you must also provide a `treedict`")
+        if treedict is not None and treedict_partition is None:
+            print("If you provide a `treedict` then you must also provide a `treedict_partition`")
+        if treedict and treedict_partition:
+            from hierarchicalsoftmax import TreeDict
+
+            species_filter = set()
+            treedict = TreeDict.load(treedict)
+            for accession, details in self.treedict.items():
+                partition = details.partition
+                if partition == treedict_partition:
+                    species_filter.add(accession.split("/")[0])
+
+        self.prediction_dataset = BarbetPredictionDataset(
+            array=array,
+            accessions=accessions,
+            seq_count=seq_count,
+            repeats=repeats,
+            species_filter=species_filter,
+            seed=42,
+        )
+        dataloader = DataLoader(
+            self.prediction_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=False,
+        )
+
+        return dataloader
