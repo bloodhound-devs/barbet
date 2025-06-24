@@ -280,7 +280,7 @@ class Barbet(TorchApp):
             default="", help="A path to output the results as images."
         ),
         image_threshold: float = 0.005,
-        greedy_only: bool = True,
+        greedy_only: bool = Param(default=True, help="If True, only output the greedy predictions rather than the probabilities for all the nodes."),
         **kwargs,
     ) -> "pd.DataFrame":
         import torch
@@ -522,7 +522,7 @@ class Barbet(TorchApp):
         assert memmap.exists(), f"Memmap file does not exist: {memmap}"
         assert memmap_index is not None, "Please provide a path to the memmap index file."
         assert memmap_index.exists(), f"Memmap index file does not exist: {memmap_index}"
-        
+
         accessions = memmap_index.read_text().strip().split("\n")
         count = len(memmap_index)
         array = read_memmap(memmap, count)
