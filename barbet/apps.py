@@ -500,9 +500,8 @@ class Barbet(TorchApp):
     def prediction_dataloader_memmap(
         self,
         module,
-        memmap:Path = None,
-        memmap_index:Path = None,
-
+        memmap:Path = Param(None, help="A path to the memmap file containing the protein embeddings."),
+        memmap_index:Path = Param(None, help="A path to the memmap index file containing the accessions."),
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
@@ -511,13 +510,18 @@ class Barbet(TorchApp):
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
         ),
-        treedict:Path=None,
-        treedict_partition:int=None,
+        treedict:Path=Param(None, help="A path to the treedict file to use for filtering species. (Must be used with `treedict_partition`)"),
+        treedict_partition:int= Param(None, help="The partition of the treedict to use for filtering species. (Must be used with `treedict`.)"),
         **kwargs,
     ) -> "Iterable":
         from barbet.data import read_memmap
         from torch.utils.data import DataLoader
         from barbet.data import BarbetPredictionDataset
+        
+        assert memmap is not None, "Please provide a path to the memmap file."
+        assert memmap.exists(), f"Memmap file does not exist: {memmap}"
+        assert memmap_index is not None, "Please provide a path to the memmap index file."
+        assert memmap_index.exists(), f"Memmap index file does not exist: {memmap_index}"
         
         accessions = memmap_index.read_text().strip().split("\n")
         count = len(memmap_index)
