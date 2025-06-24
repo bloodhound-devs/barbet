@@ -196,17 +196,7 @@ class Barbet(TorchApp):
         self,
         module,
         genome_path: Path,
-        cpus: int = Param(
-            1, help="The number of CPUs to use to extract the single copy markers."
-        ),
-        pfam_db: str = Param(
-            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm",
-            help="The Pfam database to use.",
-        ),
-        tigr_db: str = Param(
-            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm",
-            help="The TIGRFAM database to use.",
-        ),
+        markers: list[Path], 
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
@@ -220,31 +210,15 @@ class Barbet(TorchApp):
         import torch
         import numpy as np
         from torch.utils.data import DataLoader
-        from barbet.markers import extract_single_copy_markers
         from barbet.data import BarbetPredictionDataset
-
+       
         # Get hyperparameters from checkpoint
         seq_count = module.hparams.get("seq_count", 32)
         self.classification_tree = module.hparams.classification_tree
 
-        genomes = dict()
-        genomes[genome_path.stem] = str(genome_path)
-
         # TODO extract domain from the barbet model
         domain = "bac120"
         # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
-
-        ####################
-        # Extract single copy marker genes
-        ####################
-        single_copy_marker_result = extract_single_copy_markers(
-            genomes=genomes,
-            out_dir=str(self.output_dir),
-            cpus=cpus,
-            force=True,
-            pfam_db=self.process_location(pfam_db),
-            tigr_db=self.process_location(tigr_db),
-        )
 
         #######################
         # Create Embeddings
@@ -252,8 +226,7 @@ class Barbet(TorchApp):
         embeddings = []
         accessions = []
 
-        fastas = single_copy_marker_result[genome_path.stem][domain]
-
+        fastas = markers[domain]
         for fasta in track(
             fastas, description="[cyan]Embedding...  ", total=len(fastas)
         ):
@@ -359,8 +332,7 @@ class Barbet(TorchApp):
             return 1.0
 
         results_df["probability"] = results_df.apply(get_prediction_probability, axis=1)
-
-        results_df["name"] = [str(genome_path)]
+        results_df["name"] = [genome_path.name]
 
         # Reorder columns
         results_df = results_df[
@@ -396,18 +368,31 @@ class Barbet(TorchApp):
     def predict(
         self,
         input: list[Path] = Param(
+            default=...,
             help="FASTA files or directories of FASTA files. Requires genome in an individual FASTA file."
         ),
         output_dir: Path = Param("output", help="A path to the output directory."),
         output_csv: Path = Param(
             default=None, help="A path to output the results as a CSV."
         ),
-        overwrite: bool = False,
+        cpus: int = Param(
+            1, help="The number of CPUs to use to extract the single copy markers."
+        ),
+        pfam_db: str = Param(
+            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm",
+            help="The Pfam database to use.",
+        ),
+        tigr_db: str = Param(
+            "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/tigrfam/tigrfam.hmm",
+            help="The TIGRFAM database to use.",
+        ),
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
         import torch
         import pandas as pd
+        from itertools import chain
+        from barbet.markers import extract_markers_genes
 
         # Get list of files
         files = []
@@ -416,8 +401,13 @@ class Barbet(TorchApp):
         assert len(input) > 0, "No input files provided."
         for path in input:
             if path.is_dir():
-                for file in (
-                    path.rglob("*.fa") + path.rglob("*.fasta") + path.rglob("*.fna")
+                for file in chain(
+                    path.rglob("*.fa"),
+                    path.rglob("*.fasta"),
+                    path.rglob("*.fna"),
+                    path.rglob("*.fa.gz"),
+                    path.rglob("*.fasta.gz"),
+                    path.rglob("*.fna.gz"),
                 ):
                     files.append(file)
             elif path.is_file():
@@ -434,18 +424,20 @@ class Barbet(TorchApp):
         output_csv = output_csv or self.output_dir / "barbet-predictions.csv"
         output_csv = Path(output_csv)
         output_csv.parent.mkdir(exist_ok=True, parents=True)
-        if output_csv.exists() and not overwrite:
-            file_index = 1
-            base = output_csv.stem
-            ext = output_csv.suffix
-            while True:
-                candidate = output_csv.parent / f"{base}_{file_index}{ext}"
-                if not candidate.exists():
-                    output_csv = candidate
-                    break
-                file_index += 1
         console.print(
             f"Writing results for {len(files)} genome{'s' if len(files) > 1 else ''} to '{output_csv}'"
+        )
+
+        ####################
+        # Extract single copy marker genes
+        ####################
+        markers_gene_map = extract_markers_genes(
+            genomes={file.stem: str(file) for file in files},
+            out_dir=str(self.output_dir),
+            cpus=cpus,
+            force=True,
+            pfam_db=self.process_location(pfam_db),
+            tigr_db=self.process_location(tigr_db),
         )
 
         # Load the model
@@ -454,18 +446,18 @@ class Barbet(TorchApp):
 
         # Make predictions for each file
         total_df = None
-        for file_index, file in enumerate(files):
-            prediction_dataloader = self.prediction_dataloader(module, file, **kwargs)
+        for genome_path, maker_genes in markers_gene_map.items():
+            prediction_dataloader = self.prediction_dataloader(module, Path(genome_path), maker_genes, **kwargs)
             results = trainer.predict(module, dataloaders=prediction_dataloader)
             results = torch.cat(results, dim=0)
-            results_df = self.output_results(results, file, **kwargs)
+            results_df = self.output_results(results, Path(genome_path), **kwargs)
 
             if total_df is None:
                 total_df = results_df
                 if output_csv:
                     results_df.to_csv(output_csv, index=False)
             else:
-                total_df = pd.concat([total_df, results_df], axis=0).reset_index()
+                total_df = pd.concat([total_df, results_df], axis=0).reset_index(drop=True)
 
                 if output_csv:
                     results_df.to_csv(output_csv, mode="a", header=False, index=False)

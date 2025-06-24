@@ -44,7 +44,7 @@ class ESMLayers(Enum):
                 return "esm2_t6_8M_UR50D"
 
     def get_model_alphabet(self) -> tuple["ESM2", "Alphabet"]:
-        return torch.hub.load("facebookresearch/esm:main", self.model_name())
+        return torch.hub.load("facebookresearch/esm:main", self.model_name(), verbose=False)
 
 
 class ESMEmbedding(Embedding):
@@ -134,3 +134,13 @@ class ESMEmbedding(Embedding):
         assert len(seq) == len(embedding_tensor), f"Embedding representation incorrect length. should be {len(seq)} but is {len(embedding_tensor)}"
 
         return embedding_tensor
+    
+    # def embed_batch(self, seqs:list[str]) -> torch.Tensor:
+    #     """ Takes a list of protein sequences and returns a tensor of embeddings per residue. """
+    #     if isinstance(self.layers, (str,int)):
+    #         self.layers = ESMLayers.from_value(self.layers)
+        
+    #     layers = int(self.layers.value)
+
+    #     # Handle ambiguous AAs
+    #     #

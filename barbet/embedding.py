@@ -1,7 +1,6 @@
 import gzip
 import os
 from pathlib import Path
-import os
 from abc import ABC, abstractmethod
 from Bio import SeqIO
 import random

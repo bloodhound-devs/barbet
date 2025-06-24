@@ -54,15 +54,24 @@ def test_predict(k, tmp_path):
     barbet.prediction_trainer = lambda *args, **kwargs: MockPredictionTrainer()
 
     output_dir = tmp_path / "output"
-    results = barbet.predict(input=[TEST_DATA_DIR/"MAG-GUT41.fa.gz"] * k, output_dir=output_dir, image_format="dot")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    # copy test data to temp directory
+    input = []
+    for i, file in enumerate([TEST_DATA_DIR / "MAG-GUT41.fa.gz"] * k):
+        output_file = tmp_path / f"{i}.fa.gz"
+        output_file.write_bytes(file.read_bytes())
+        input.append(output_file)
+
+    results = barbet.predict(input=input, output_dir=output_dir, image_format="dot")
     
     # Check output directory
     assert output_dir.exists()    
-    assert (output_dir / "MAG-GUT41.fa").exists()
-    assert (output_dir / "MAG-GUT41.fa" / "pfam.tblout").exists()
+    assert (output_dir / "1.fa").exists()
+    assert (output_dir / "1.fa" / "pfam.tblout").exists()
 
     # Check image files
-    image_file = (output_dir / "MAG-GUT41.fa.gz.dot")
+    image_file = (output_dir / "1.fa.gz.dot")
     assert image_file.exists()
     assert 'root" -> "A" [label=0.18' in image_file.read_text()
     
@@ -71,8 +80,8 @@ def test_predict(k, tmp_path):
     assert 'name' in results.columns
     assert 'greedy_prediction' in results.columns
     assert 'probability' in results.columns
-    for _, row in results.iterrows():
-        assert "MAG-GUT41.fa.gz" in row['name']
+    for i, (_, row) in enumerate(results.iterrows()):
+        assert f"{i}.fa.gz" in row['name']
         assert row['greedy_prediction'] == 'E'
         assert 0.29 < row['probability'] < 0.30
         
