@@ -308,7 +308,7 @@ class Barbet(TorchApp):
             columns=category_names
         )
         results_df["name"] = names
-        results_df = results_df.sort_values(by="name").reset_index(drop=True)
+        results_df = results_df.groupby(["name"]).mean().reset_index()
 
         classification_probabilities = torch.as_tensor(
             results_df[category_names].to_numpy()
