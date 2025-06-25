@@ -549,7 +549,7 @@ class Barbet(TorchApp):
             species_filter = set()
             console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
-            for accession, details in track(self.treedict.items()):
+            for accession, details in track(treedict.items()):
                 partition = details.partition
                 if partition == treedict_partition:
                     species_filter.add(accession.split("/")[0])
