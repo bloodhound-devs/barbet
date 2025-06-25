@@ -494,7 +494,14 @@ class Barbet(TorchApp):
         results = torch.cat(results_list, dim=0)
         names = [stack.species for stack in self.prediction_dataset.stacks]
         results_df = self.output_results(results, names, **kwargs)
+
+        # Add gold values if possible
+        if hasattr(self, 'gold_values'):
+            results_df['gold_value'] = results_df['name'].map(self.gold_values)
+    
+        console.print(f"writing to '{output_csv}'")
         results_df.to_csv(output_csv, index=False)
+
         return results_df
     
     @method
@@ -551,10 +558,13 @@ class Barbet(TorchApp):
             species_filter = set()
             console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
-            for accession, details in track(treedict.items()):
+            self.gold_values = dict()
+            for accession, details in treedict.items():
                 partition = details.partition
                 if partition == treedict_partition:
-                    species_filter.add(accession.split("/")[0])
+                    organism_name = accession.split("/")[0]
+                    species_filter.add(organism_name)
+                    self.gold_values[organism_name] = treedict.node(accession).name.strip()
             console.print(f"Filtering for {len(species_filter)} species")
 
         self.prediction_dataset = BarbetPredictionDataset(
