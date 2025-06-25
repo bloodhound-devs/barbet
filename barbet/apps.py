@@ -446,7 +446,8 @@ class Barbet(TorchApp):
         # Make predictions for each file
         total_df = None
         for genome_path, maker_genes in markers_gene_map.items():
-            prediction_dataloader = self.prediction_dataloader(module, Path(genome_path), maker_genes, **kwargs)
+            genome_path = Path(genome_path)
+            prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, **kwargs)
             results = trainer.predict(module, dataloaders=prediction_dataloader)
             results = torch.cat(results, dim=0)
             results_df = self.output_results(results, genome_path.name, **kwargs)

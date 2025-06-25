@@ -150,21 +150,6 @@ class BarbetTrainingDataset(Dataset):
         
         # return embedding, self.gene_id_dict[gene_id], self.treedict[self.accessions[0]].node_id # hack
         return embedding, node_id
-
-
-# @dataclass(kw_only=True)
-# class BarbetPredictionDataset(Dataset):
-#     embeddings: list[torch.Tensor]
-#     gene_family_ids: list[int]
-
-#     def __post_init__(self):
-#         assert len(self.embeddings) == len(self.gene_family_ids)
-
-#     def __len__(self):
-#         return len(self.gene_family_ids)
-
-#     def __getitem__(self, idx):
-#         return self.embeddings[idx] #, self.gene_family_ids[idx]
     
 
 @dataclass
