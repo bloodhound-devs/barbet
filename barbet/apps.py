@@ -280,7 +280,7 @@ class Barbet(TorchApp):
             default="", help="A path to output the results as images."
         ),
         image_threshold: float = 0.005,
-        greedy_only: bool = Param(default=True, help="If True, only output the greedy predictions rather than the probabilities for all the nodes."),
+        probabilities: bool = Param(default=False, help="If True, include probabilities for all the nodes in the taxonomic tree."),
         **kwargs,
     ) -> "pd.DataFrame":
         import torch
@@ -290,6 +290,7 @@ class Barbet(TorchApp):
             greedy_predictions,
             render_probabilities,
         )
+        from barbet.data import RANKS
 
         assert self.classification_tree
         assert self.classification_tree.layer_size == results.shape[-1]
@@ -321,17 +322,18 @@ class Barbet(TorchApp):
             threshold=threshold,
         )
 
-        results_df["greedy_prediction"] = [
-            self.node_to_str(node) for node in predictions
-        ]
+        output_columns = ["name"]
+        for rank in RANKS:
+            output_columns += [f"{rank}_prediction", f"{rank}_probability"]
+            results_df[f"{rank}_prediction"] = ""
+            results_df[f"{rank}_probability"] = 0.0
 
-        def get_prediction_probability(row):
-            prediction = row["greedy_prediction"]
-            if prediction in row:
-                return row[prediction]
-            return 1.0
-
-        results_df["probability"] = results_df.apply(get_prediction_probability, axis=1)
+        for index, node in enumerate(predictions):
+            lineage = node.ancestors[1:] + (node,)
+            for rank, lineage_node in zip(RANKS, lineage):
+                node_name = self.node_to_str(lineage_node)
+                results_df.loc[index, f"{rank}_prediction"] = node_name
+                results_df.loc[index, f"{rank}_probability"] = results_df.loc[index,node_name]
 
         # Output images
         if image_format:
@@ -348,13 +350,9 @@ class Barbet(TorchApp):
                 threshold=image_threshold,
             )
 
-        if greedy_only:
-            results_df = results_df[["name", "greedy_prediction", "probability"]]
-        else:
-            # Reorder columns
-            results_df = results_df[
-                ["name", "greedy_prediction", "probability"] + category_names
-            ]
+        if probabilities:
+            output_columns += category_names
+        results_df = results_df[output_columns]
 
         return results_df
 
@@ -462,7 +460,7 @@ class Barbet(TorchApp):
                 if output_csv:
                     results_df.to_csv(output_csv, mode="a", header=False, index=False)
 
-        console.print(total_df[["name", "greedy_prediction", "probability"]])
+        console.print(total_df[["name", "family_prediction", "genus_prediction", "species_prediction"]])
         console.print(f"Saved to: '{output_csv}'")
         return total_df
 
