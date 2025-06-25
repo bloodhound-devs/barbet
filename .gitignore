@@ -1,3 +1,4 @@
+validation*.csv
 docs/_build/
 wandb/*
 wandb*/*
