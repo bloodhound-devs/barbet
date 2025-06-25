@@ -200,7 +200,7 @@ class Barbet(TorchApp):
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
-        num_workers: int = 0,
+        num_workers: int = 4,
         repeats: int = Param(
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
@@ -505,7 +505,7 @@ class Barbet(TorchApp):
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
-        num_workers: int = 0,
+        num_workers: int = 4,
         repeats: int = Param(
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
@@ -523,8 +523,14 @@ class Barbet(TorchApp):
         assert memmap_index is not None, "Please provide a path to the memmap index file."
         assert memmap_index.exists(), f"Memmap index file does not exist: {memmap_index}"
 
+        # Read the memmap array index
+        console.print(f"Reading memmap array index '{memmap_index}'")
         accessions = memmap_index.read_text().strip().split("\n")
-        count = len(memmap_index)
+        count = len(accessions)
+        console.print(f"Found {count} accessions")
+
+        # Load the memmap array itself
+        console.print(f"Loading memmap array '{memmap}'")
         array = read_memmap(memmap, count)
 
         # Get hyperparameters from checkpoint
@@ -537,15 +543,17 @@ class Barbet(TorchApp):
             print("If you provide a `treedict_partition` then you must also provide a `treedict`")
         if treedict is not None and treedict_partition is None:
             print("If you provide a `treedict` then you must also provide a `treedict_partition`")
-        if treedict and treedict_partition:
+        if treedict is not None and treedict_partition is not None:
             from hierarchicalsoftmax import TreeDict
 
             species_filter = set()
+            console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
-            for accession, details in self.treedict.items():
+            for accession, details in track(self.treedict.items()):
                 partition = details.partition
                 if partition == treedict_partition:
                     species_filter.add(accession.split("/")[0])
+            console.print(f"Filtering for {len(species_filter)} species")
 
         self.prediction_dataset = BarbetPredictionDataset(
             array=array,
