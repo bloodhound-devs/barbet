@@ -495,9 +495,11 @@ class Barbet(TorchApp):
 
         # Add gold values if possible
         if hasattr(self, 'gold_values'):
-            results_df['gold_value'] = results_df['name'].map(self.gold_values)
+            from barbet.data import RANKS
+            for rank in RANKS:
+                results_df[f'gold_{rank}'] = results_df['name'].map(self.gold_values[rank])
     
-        console.print(f"writing to '{output_csv}'")
+        console.print(f"Writing to '{output_csv}'")
         results_df.to_csv(output_csv, index=False)
 
         return results_df
@@ -552,17 +554,23 @@ class Barbet(TorchApp):
             print("If you provide a `treedict` then you must also provide a `treedict_partition`")
         if treedict is not None and treedict_partition is not None:
             from hierarchicalsoftmax import TreeDict
+            from barbet.data import RANKS
 
             species_filter = set()
             console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
-            self.gold_values = dict()
+            self.gold_values = defaultdict(dict)
+            
             for accession, details in treedict.items():
                 partition = details.partition
                 if partition == treedict_partition:
                     organism_name = accession.split("/")[0]
                     species_filter.add(organism_name)
-                    self.gold_values[organism_name] = treedict.node(accession).name.strip()
+                    node = treedict.node(accession)
+                    lineage = node.ancestors[1:] + (node,)
+                    for rank, lineage_node in zip(RANKS, lineage):
+                        self.gold_values[rank][organism_name] = lineage_node.name.strip()
+
             console.print(f"Filtering for {len(species_filter)} species")
 
         self.prediction_dataset = BarbetPredictionDataset(

@@ -43,7 +43,7 @@ DOMAIN=bac120
 ESM_LAYERS=6
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
-TREEDICT_NAME=esm${ESM_LAYERS}.st
+TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 
 barbet-tools predict-memmap \
@@ -52,4 +52,42 @@ barbet-tools predict-memmap \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --treedict $TREEDICT \
         --treedict-partition 0 \
+        --no-greedy-only \
         --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}.csv
+
+
+
+DOMAIN=ar53
+ESM_LAYERS=6
+PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
+MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
+TREEDICT_NAME=esm${ESM_LAYERS}.td
+TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
+
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/ar53-stack-esm6.st-b4f32l2g2lr0.0002ep70a512s32-r226/version_0/checkpoints/weights-epoch=43-valid_loss=5.8.ckpt
+barbet-tools predict-memmap \
+        --checkpoint $CHECKPOINT \
+        --memmap  $MEMMAP \
+        --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
+        --treedict $TREEDICT \
+        --treedict-partition 0 \
+        --no-greedy-only \
+        --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}.csv
+
+ESM_LAYERS=12
+PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
+MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
+TREEDICT_NAME=esm${ESM_LAYERS}.td
+TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
+
+CHECKPOINT=/data/gpfs/projects/punim2199/rob/bloodhound-stack/logs/ar53-stack-esm12.st-b4f768l2g2lr0.0002ep70a512s32-r226/version_0/checkpoints/weights-epoch\=39-valid_loss\=3.6.ckpt
+barbet-tools predict-memmap \
+        --checkpoint $CHECKPOINT \
+        --memmap  $MEMMAP \
+        --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
+        --treedict $TREEDICT \
+        --treedict-partition 0 \
+        --no-greedy-only \
+        --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}.csv
+
+
