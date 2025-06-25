@@ -54,3 +54,7 @@ class BarbetModel(nn.Module):
             return result, attention_scores
             
         return result
+
+
+# Alias for loading legacy checkpoints
+BloodhoundModel = BarbetModel

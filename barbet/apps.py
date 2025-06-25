@@ -492,7 +492,7 @@ class Barbet(TorchApp):
             return None
 
         results = torch.cat(results_list, dim=0)
-        names = [stack.species for stack in self.prediction_dataloader.stacks]
+        names = [stack.species for stack in self.prediction_dataset.stacks]
         results_df = self.output_results(results, names, **kwargs)
         results_df.to_csv(output_csv, index=False)
         return results_df
@@ -535,7 +535,8 @@ class Barbet(TorchApp):
         array = read_memmap(memmap, count)
 
         # Get hyperparameters from checkpoint
-        seq_count = module.hparams.get("seq_count", 32)
+        domain = "bac120" if module.model.classifier.out_features > 100_000 else "ar53"
+        seq_count = module.hparams.get("seq_count", 32 if domain == "bac120" else 8)
         self.classification_tree = module.hparams.classification_tree
 
         # If treedict is provided, then we filter the accessions to only those that are in the treedict
