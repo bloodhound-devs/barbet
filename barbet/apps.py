@@ -303,6 +303,7 @@ class Barbet(TorchApp):
         category_names = [
             self.node_to_str(node) for node in node_list if not node.is_root
         ]
+        category_names_set = set(category_names)
 
         results_df = pd.DataFrame(
             classification_probabilities.numpy(), 
@@ -328,12 +329,16 @@ class Barbet(TorchApp):
             results_df[f"{rank}_prediction"] = ""
             results_df[f"{rank}_probability"] = 0.0
 
+
         for index, node in enumerate(predictions):
             lineage = node.ancestors[1:] + (node,)
+            probability = 1.0
             for rank, lineage_node in zip(RANKS, lineage):
                 node_name = self.node_to_str(lineage_node)
                 results_df.loc[index, f"{rank}_prediction"] = node_name
-                results_df.loc[index, f"{rank}_probability"] = results_df.loc[index,node_name]
+                if node_name in category_names_set:
+                    probability = results_df.loc[index,node_name]
+                results_df.loc[index, f"{rank}_probability"] = probability
 
         # Output images
         if image_format:
@@ -460,7 +465,7 @@ class Barbet(TorchApp):
                 if output_csv:
                     results_df.to_csv(output_csv, mode="a", header=False, index=False)
 
-        console.print(total_df[["name", "family_prediction", "genus_prediction", "species_prediction"]])
+        console.print(total_df[["name", "species_prediction", "species_probability"]])
         console.print(f"Saved to: '{output_csv}'")
         return total_df
 
@@ -494,10 +499,10 @@ class Barbet(TorchApp):
         results_df = self.output_results(results, names, **kwargs)
 
         # Add gold values if possible
-        if hasattr(self, 'gold_values'):
+        if hasattr(self, 'true_values'):
             from barbet.data import RANKS
             for rank in RANKS:
-                results_df[f'gold_{rank}'] = results_df['name'].map(self.gold_values[rank])
+                results_df[f'{rank}_true'] = results_df['name'].map(self.true_values[rank])
     
         console.print(f"Writing to '{output_csv}'")
         results_df.to_csv(output_csv, index=False)
@@ -518,8 +523,8 @@ class Barbet(TorchApp):
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
         ),
-        treedict:Path=Param(None, help="A path to the treedict file to use for filtering species. (Must be used with `treedict_partition`)"),
-        treedict_partition:int= Param(None, help="The partition of the treedict to use for filtering species. (Must be used with `treedict`.)"),
+        treedict:Path=Param(None, help="A path to the treedict file to use for filtering genomes. (Must be used with `treedict_partition`)"),
+        treedict_partition:int= Param(None, help="The partition of the treedict to use for filtering genomes. (Must be used with `treedict`.)"),
         **kwargs,
     ) -> "Iterable":
         from barbet.data import read_memmap
@@ -559,7 +564,7 @@ class Barbet(TorchApp):
             species_filter = set()
             console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
-            self.gold_values = defaultdict(dict)
+            self.true_values = defaultdict(dict)
             
             for accession, details in treedict.items():
                 partition = details.partition
@@ -569,7 +574,7 @@ class Barbet(TorchApp):
                     node = treedict.node(accession)
                     lineage = node.ancestors[1:] + (node,)
                     for rank, lineage_node in zip(RANKS, lineage):
-                        self.gold_values[rank][organism_name] = lineage_node.name.strip()
+                        self.true_values[rank][organism_name] = lineage_node.name.strip()
 
             console.print(f"Filtering for {len(species_filter)} species")
 

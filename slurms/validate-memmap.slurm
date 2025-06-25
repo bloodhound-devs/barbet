@@ -71,7 +71,6 @@ barbet-tools predict-memmap \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --treedict $TREEDICT \
         --treedict-partition 0 \
-        --no-greedy-only \
         --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}.csv
 
 ESM_LAYERS=12
@@ -87,7 +86,6 @@ barbet-tools predict-memmap \
         --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
         --treedict $TREEDICT \
         --treedict-partition 0 \
-        --no-greedy-only \
         --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}.csv
 
 
