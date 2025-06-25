@@ -44,11 +44,13 @@ CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/logs/bac120-stack-esm6.td-b4
 barbet \
     --checkpoint $CHECKPOINT \
     --output-dir outputs \
+    --image-format jpg \
     --input $INPUT
 
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/logs/bac120-stack-esm6.td-b4f1536l2g2lr0.0002ep70a512s32prod-r226/version_0/checkpoints/weights-epoch\=69-valid_loss\=0.17.ckpt
 barbet \
     --checkpoint $CHECKPOINT \
     --output-dir outputs \
+    --image-format jpg \
     --input $INPUT
 

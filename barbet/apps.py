@@ -495,7 +495,7 @@ class Barbet(TorchApp):
             return None
 
         results = torch.cat(results_list, dim=0)
-        names = [stack.species for stack in self.prediction_dataset.stacks]
+        names = [stack.genome for stack in self.prediction_dataset.stacks]
         results_df = self.output_results(results, names, **kwargs)
 
         # Add gold values if possible
@@ -552,7 +552,7 @@ class Barbet(TorchApp):
         self.classification_tree = module.hparams.classification_tree
 
         # If treedict is provided, then we filter the accessions to only those that are in the treedict
-        species_filter = None
+        genome_filter = None
         if treedict is None and treedict_partition is not None:
             print("If you provide a `treedict_partition` then you must also provide a `treedict`")
         if treedict is not None and treedict_partition is None:
@@ -561,7 +561,7 @@ class Barbet(TorchApp):
             from hierarchicalsoftmax import TreeDict
             from barbet.data import RANKS
 
-            species_filter = set()
+            genome_filter = set()
             console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
             self.true_values = defaultdict(dict)
@@ -570,20 +570,20 @@ class Barbet(TorchApp):
                 partition = details.partition
                 if partition == treedict_partition:
                     organism_name = accession.split("/")[0]
-                    species_filter.add(organism_name)
+                    genome_filter.add(organism_name)
                     node = treedict.node(accession)
                     lineage = node.ancestors[1:] + (node,)
                     for rank, lineage_node in zip(RANKS, lineage):
                         self.true_values[rank][organism_name] = lineage_node.name.strip()
 
-            console.print(f"Filtering for {len(species_filter)} species")
+            console.print(f"Filtering for {len(genome_filter)} genomes")
 
         self.prediction_dataset = BarbetPredictionDataset(
             array=array,
             accessions=accessions,
             seq_count=seq_count,
             repeats=repeats,
-            species_filter=species_filter,
+            genome_filter=genome_filter,
             seed=42,
         )
         dataloader = DataLoader(

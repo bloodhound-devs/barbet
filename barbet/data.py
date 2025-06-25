@@ -38,7 +38,7 @@ def choose_k_from_n(lst, k) -> list[int]:
 
 @dataclass(kw_only=True)
 class BarbetStack():
-    species:str
+    genome:str
     array_indices:np.array
 
     def __post_init__(self):
@@ -53,22 +53,22 @@ class BarbetPredictionDataset(Dataset):
     repeats:int = 2
     seed:int = 42
     stacks: list[BarbetStack] = field(init=False)
-    species_filter:set[str]|None = None
+    genome_filter:set[str]|None = None
 
     def __post_init__(self):
-        species_to_array_indices = defaultdict(set)
+        genome_to_array_indices = defaultdict(set)
         for index, accession in enumerate(self.accessions):
             slash_position = accession.rfind("/")
             assert slash_position != -1
-            species = accession[:slash_position]
-            if self.species_filter and species not in self.species_filter:
+            genome = accession[:slash_position]
+            if self.genome_filter and genome not in self.genome_filter:
                 continue
-            species_to_array_indices[species].add(index)
+            genome_to_array_indices[genome].add(index)
 
         # Build stacks
         random.seed(self.seed)
         self.stacks = []
-        for species, species_array_indices in species_to_array_indices.items():
+        for genome, genome_array_indices in genome_to_array_indices.items():
             stack_indices = []
             remainder = []
             for repeat_index in range(self.repeats + 1):
@@ -76,14 +76,14 @@ class BarbetPredictionDataset(Dataset):
                     break
 
                 # Finish Remainder
-                species_array_indices_set = set(species_array_indices)
-                available = species_array_indices_set - set(remainder)
+                genome_array_indices_set = set(genome_array_indices)
+                available = genome_array_indices_set - set(remainder)
                 to_add = random.sample(list(available), self.seq_count - len(remainder))
                 to_add_set = set(to_add)
                 assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
 
-                self.add_stack(species, remainder + to_add)
-                remainder = list(species_array_indices_set - to_add_set)
+                self.add_stack(genome, remainder + to_add)
+                remainder = list(genome_array_indices_set - to_add_set)
                 random.shuffle(remainder)
 
                 # If we have already added each item the required number of times, then stop
@@ -91,15 +91,15 @@ class BarbetPredictionDataset(Dataset):
                     break
 
                 while len(remainder) >= self.seq_count:
-                    self.add_stack(species, remainder[:self.seq_count])
+                    self.add_stack(genome, remainder[:self.seq_count])
                     remainder = remainder[self.seq_count:]
                             
-    def add_stack(self, species:str, indices:Iterable[int]) -> BarbetStack:
+    def add_stack(self, genome:str, indices:Iterable[int]) -> BarbetStack:
         """
         Add a new stack to the dataset.
         """
         indices = np.array(sorted(indices))
-        stack = BarbetStack(species=species, array_indices=indices)
+        stack = BarbetStack(genome=genome, array_indices=indices)
         self.stacks.append(stack)
         return stack
 
