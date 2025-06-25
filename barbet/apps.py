@@ -272,7 +272,7 @@ class Barbet(TorchApp):
     def output_results(
         self,
         results,
-        genome_path: Path,
+        names: list[str],
         threshold: float = Param(
             default=0.0, help="The threshold value for making hierarchical predictions."
         ),
@@ -294,9 +294,6 @@ class Barbet(TorchApp):
         assert self.classification_tree
         assert self.classification_tree.layer_size == results.shape[-1]
 
-        # Average results across all stacks
-        results = results.mean(axis=0, keepdims=True)
-
         classification_probabilities = node_probabilities(
             results, root=self.classification_tree
         )
@@ -307,8 +304,11 @@ class Barbet(TorchApp):
         ]
 
         results_df = pd.DataFrame(
-            classification_probabilities.numpy(), columns=category_names
+            classification_probabilities.numpy(), 
+            columns=category_names
         )
+        results_df["name"] = names
+        results_df = results_df.sort_values(by="name").reset_index(drop=True)
 
         classification_probabilities = torch.as_tensor(
             results_df[category_names].to_numpy()
@@ -332,12 +332,6 @@ class Barbet(TorchApp):
             return 1.0
 
         results_df["probability"] = results_df.apply(get_prediction_probability, axis=1)
-        results_df["name"] = [genome_path.name]
-
-        # Reorder columns
-        results_df = results_df[
-            ["name", "greedy_prediction", "probability"] + category_names
-        ]
 
         # Output images
         if image_format:
@@ -345,7 +339,7 @@ class Barbet(TorchApp):
                 f"Writing inference probability renders to: {self.output_dir}"
             )
             output_dir = Path(self.output_dir)
-            image_paths = [output_dir / f"{genome_path.name}.{image_format}"]
+            image_paths = [output_dir / f"{name}.{image_format}" for name in results_df["name"]]
             render_probabilities(
                 root=self.classification_tree,
                 filepaths=image_paths,
@@ -356,6 +350,11 @@ class Barbet(TorchApp):
 
         if greedy_only:
             results_df = results_df[["name", "greedy_prediction", "probability"]]
+        else:
+            # Reorder columns
+            results_df = results_df[
+                ["name", "greedy_prediction", "probability"] + category_names
+            ]
 
         return results_df
 
@@ -450,7 +449,7 @@ class Barbet(TorchApp):
             prediction_dataloader = self.prediction_dataloader(module, Path(genome_path), maker_genes, **kwargs)
             results = trainer.predict(module, dataloaders=prediction_dataloader)
             results = torch.cat(results, dim=0)
-            results_df = self.output_results(results, Path(genome_path), **kwargs)
+            results_df = self.output_results(results, genome_path.name, **kwargs)
 
             if total_df is None:
                 total_df = results_df
@@ -492,7 +491,8 @@ class Barbet(TorchApp):
             return None
 
         results = torch.cat(results_list, dim=0)
-        results_df = self.output_results(results, **kwargs)
+        names = [stack.species for stack in self.prediction_dataloader.stacks]
+        results_df = self.output_results(results, names, **kwargs)
         results_df.to_csv(output_csv, index=False)
         return results_df
     
