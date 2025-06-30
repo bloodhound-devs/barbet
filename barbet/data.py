@@ -118,8 +118,6 @@ class BarbetPredictionDataset(Dataset):
 
         assert len(array_indices) > 0, f"Stack has no array indices"
         with torch.no_grad():
-            # data = np.array(self.array[array_indices, :], copy=False)
-            # embeddings = torch.tensor(data, dtype=torch.float16)
             data = np.asarray(self.array[array_indices, :]).copy()
             embeddings = torch.from_numpy(data).to(torch.float16)
 

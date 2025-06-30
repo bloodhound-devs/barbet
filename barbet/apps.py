@@ -305,6 +305,8 @@ class Barbet(TorchApp):
 
         assert self.classification_tree
 
+        breakpoint()
+
         node_list = self.classification_tree.node_list_softmax
         category_names = [
             self.node_to_str(node) for node in node_list if not node.is_root
@@ -322,13 +324,13 @@ class Barbet(TorchApp):
             threshold=threshold,
         )
 
-        output_columns = ["name"]
+        output_columns = []
         for rank in RANKS:
             output_columns += [f"{rank}_prediction", f"{rank}_probability"]
             results_df[f"{rank}_prediction"] = ""
             results_df[f"{rank}_probability"] = 0.0
 
-        for index, node in enumerate(predictions):
+        for index, node in zip(results_df.index, predictions):
             lineage = node.ancestors[1:] + (node,)
             probability = 1.0
             for rank, lineage_node in zip(RANKS, lineage):
@@ -344,7 +346,7 @@ class Barbet(TorchApp):
                 f"Writing inference probability renders to: {self.output_dir}"
             )
             output_dir = Path(self.output_dir)
-            image_paths = [output_dir / f"{name}.{image_format}" for name in results_df["name"]]
+            image_paths = [output_dir / f"{name}.{image_format}" for name in results_df.index]
             render_probabilities(
                 root=self.classification_tree,
                 filepaths=image_paths,
@@ -449,21 +451,21 @@ class Barbet(TorchApp):
         for genome_path, maker_genes in markers_gene_map.items():
             genome_path = Path(genome_path)
             prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, **kwargs)
-            module.setup_prediction(genome_path.name)
+            module.setup_prediction(self, genome_path.name)
             trainer.predict(module, dataloaders=prediction_dataloader)
             results_df = self.output_results(module.results_df, **kwargs)
 
             if total_df is None:
                 total_df = results_df
                 if output_csv:
-                    results_df.to_csv(output_csv, index=False)
+                    results_df.to_csv(output_csv)
             else:
                 total_df = pd.concat([total_df, results_df], axis=0).reset_index(drop=True)
 
                 if output_csv:
-                    results_df.to_csv(output_csv, mode="a", header=False, index=False)
+                    results_df.to_csv(output_csv, mode="a", header=False)
 
-        console.print(total_df[["name", "species_prediction", "species_probability"]])
+        console.print(total_df[["species_prediction", "species_probability"]])
         console.print(f"Saved to: '{output_csv}'")
         return total_df
 
@@ -487,7 +489,7 @@ class Barbet(TorchApp):
         trainer = self.prediction_trainer(module, **kwargs)
         prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
 
-        module.setup_prediction([stack.genome for stack in self.prediction_dataset.stacks])
+        module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks])
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
         results_df = self.output_results(module.results_df, **kwargs)
 
@@ -498,7 +500,7 @@ class Barbet(TorchApp):
                 results_df[f'{rank}_true'] = results_df['name'].map(self.true_values[rank])
     
         console.print(f"Writing to '{output_csv}'")
-        results_df.to_csv(output_csv, index=False)
+        results_df.to_csv(output_csv)
 
         return results_df
     

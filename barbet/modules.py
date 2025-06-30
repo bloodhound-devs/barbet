@@ -14,13 +14,13 @@ class BarbetLightningModule(GeneralLightningModule):
 #         breakpoint()
 #         return super().predict_step(x, batch_idx, dataloader_idx)
 
-    def setup_prediction(self, names:list[str]|str):
+    def setup_prediction(self, barbet, names:list[str]|str):
         self.names = names
-        classification_tree = self.hparams.classification_tree
+        self.classification_tree = self.hparams.classification_tree
         self.results_df = None
         self.counter = 0
         self.category_names = [
-            self.node_to_str(node) for node in classification_tree.node_list_softmax if not node.is_root
+            barbet.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root
         ]
 
     def on_predict_batch_end(self, results, batch, batch_idx, dataloader_idx=0):
@@ -45,9 +45,11 @@ class BarbetLightningModule(GeneralLightningModule):
         else:
             self.results_df = self.results_df.add(results_df, fill_value=0)
 
-    def on_predict_epoch_end(self, results):
+    def on_predict_epoch_end(self):
         # Divide by counts to get average
-        self.results_df /= self.results_df['counts']
+        counts = self.results_df["counts"]
+        self.results_df = self.results_df.drop(columns=["counts"]).div(counts, axis=0)
+
 
         
 
