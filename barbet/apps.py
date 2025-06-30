@@ -6,7 +6,6 @@ from rich.console import Console
 from rich.progress import track
 from torchapp import TorchApp, Param, method, main, tool
 
-from torchapp.modules import GeneralLightningModule
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -19,13 +18,6 @@ if TYPE_CHECKING:
 
 console = Console()
 
-# class DebugLightningModule(GeneralLightningModule):
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#     def predict_step(self, x, batch_idx, dataloader_idx=0):
-#         breakpoint()
-#         return super().predict_step(x, batch_idx, dataloader_idx)
 
 # from lightning import Trainer
 # class PredictionTrainer(Trainer):
@@ -189,9 +181,10 @@ class Barbet(TorchApp):
             train_all=train_all,
         )
 
-    # @method
-    # def module_class(self) :
-    #     return DebugLightningModule
+    @method
+    def module_class(self) :
+        from .modules import BarbetLightningModule
+        return BarbetLightningModule
 
     @method
     def extra_hyperparameters(self, embedding_model: str = "") -> dict:
@@ -292,8 +285,7 @@ class Barbet(TorchApp):
     @method
     def output_results(
         self,
-        results,
-        names: list[str],
+        results_df,
         threshold: float = Param(
             default=0.0, help="The threshold value for making hierarchical predictions."
         ),
@@ -305,33 +297,19 @@ class Barbet(TorchApp):
         **kwargs,
     ) -> "pd.DataFrame":
         import torch
-        import pandas as pd
         from hierarchicalsoftmax.inference import (
-            node_probabilities,
             greedy_predictions,
             render_probabilities,
         )
         from barbet.data import RANKS
 
         assert self.classification_tree
-        assert self.classification_tree.layer_size == results.shape[-1]
-
-        classification_probabilities = node_probabilities(
-            results, root=self.classification_tree
-        )
 
         node_list = self.classification_tree.node_list_softmax
         category_names = [
             self.node_to_str(node) for node in node_list if not node.is_root
         ]
         category_names_set = set(category_names)
-
-        results_df = pd.DataFrame(
-            classification_probabilities.numpy(), 
-            columns=category_names
-        )
-        results_df["name"] = names
-        results_df = results_df.groupby(["name"]).mean().reset_index()
 
         classification_probabilities = torch.as_tensor(
             results_df[category_names].to_numpy()
@@ -349,7 +327,6 @@ class Barbet(TorchApp):
             output_columns += [f"{rank}_prediction", f"{rank}_probability"]
             results_df[f"{rank}_prediction"] = ""
             results_df[f"{rank}_probability"] = 0.0
-
 
         for index, node in enumerate(predictions):
             lineage = node.ancestors[1:] + (node,)
@@ -472,9 +449,9 @@ class Barbet(TorchApp):
         for genome_path, maker_genes in markers_gene_map.items():
             genome_path = Path(genome_path)
             prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, **kwargs)
-            results = trainer.predict(module, dataloaders=prediction_dataloader)
-            results = torch.cat(results, dim=0)
-            results_df = self.output_results(results, genome_path.name, **kwargs)
+            module.setup_prediction(genome_path.name)
+            trainer.predict(module, dataloaders=prediction_dataloader)
+            results_df = self.output_results(module.results_df, **kwargs)
 
             if total_df is None:
                 total_df = results_df
@@ -510,14 +487,9 @@ class Barbet(TorchApp):
         trainer = self.prediction_trainer(module, **kwargs)
         prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
 
-        results_list = trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
-
-        if not results_list:
-            return None
-
-        results = torch.cat(results_list, dim=0)
-        names = [stack.genome for stack in self.prediction_dataset.stacks]
-        results_df = self.output_results(results, names, **kwargs)
+        module.setup_prediction([stack.genome for stack in self.prediction_dataset.stacks])
+        trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
+        results_df = self.output_results(module.results_df, **kwargs)
 
         # Add gold values if possible
         if hasattr(self, 'true_values'):
