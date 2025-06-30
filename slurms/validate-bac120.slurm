@@ -32,8 +32,6 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
 
-MAX_REPEATS=5
-
 DOMAIN=bac120
 ESM_LAYERS=6
 FEATURES=768

@@ -305,8 +305,6 @@ class Barbet(TorchApp):
 
         assert self.classification_tree
 
-        breakpoint()
-
         node_list = self.classification_tree.node_list_softmax
         category_names = [
             self.node_to_str(node) for node in node_list if not node.is_root
@@ -497,7 +495,7 @@ class Barbet(TorchApp):
         if hasattr(self, 'true_values'):
             from barbet.data import RANKS
             for rank in RANKS:
-                results_df[f'{rank}_true'] = results_df['name'].map(self.true_values[rank])
+                results_df[f'{rank}_true'] = results_df.index.map(self.true_values[rank])
     
         console.print(f"Writing to '{output_csv}'")
         results_df.to_csv(output_csv)
