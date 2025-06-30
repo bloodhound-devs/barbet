@@ -179,3 +179,9 @@ out/
 .DS_Store
 tests/data/weights-epoch=69-valid_loss=0.28.ckpt
 output/
+
+archaea_genus_validation.png
+esm_accuracy.html
+genus_validation.pdf
+genus_validation.png
+roc.py

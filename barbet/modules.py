@@ -40,11 +40,10 @@ class BarbetLightningModule(GeneralLightningModule):
         results_df = results_df.groupby(["name"]).sum()
         self.batch_dfs.append(results_df)
 
-        # if self.results_df is None:
-        #     self.results_df = results_df
-        # else:
-        #     self.results_df = self.results_df.add(results_df, fill_value=0)
-
+        # Concatenate and group every 200 batches to save memory
+        if batch_idx and batch_idx % 200 == 0:
+            self.batch_dfs = [pd.concat(self.batch_dfs).groupby(level=0).sum()]
+            
     def on_predict_epoch_end(self):
         self.results_df = pd.concat(self.batch_dfs).groupby(level=0).sum()
         del self.batch_dfs
