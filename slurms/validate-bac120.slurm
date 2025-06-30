@@ -1,7 +1,7 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=predict
+#SBATCH --job-name=barbet-validate
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -44,7 +44,7 @@ RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s
 VERSION=$(ls -r1 outputs/$RUN_NAME/lightning_logs)
 CHECKPOINT=$(ls -1 outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
 
-MAX_REPEATS=1
+MAX_REPEATS=4
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
     barbet-tools predict-memmap \
             --checkpoint $CHECKPOINT \
@@ -54,6 +54,6 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
             --treedict-partition 0 \
             --repeats $REPEATS \
             --num-workers 1 \
-            --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+            --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 

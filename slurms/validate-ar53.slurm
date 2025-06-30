@@ -51,7 +51,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 
 
@@ -72,7 +72,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 
 DOMAIN=ar53
@@ -92,7 +92,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 
 DOMAIN=ar53
@@ -112,7 +112,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 
 
@@ -134,7 +134,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 
 DOMAIN=ar53
@@ -154,6 +154,6 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --treedict $TREEDICT \
                 --treedict-partition 0 \
                 --repeats $REPEATS \
-                --output-csv validation-base-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
 done
 

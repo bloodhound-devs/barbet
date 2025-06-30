@@ -489,7 +489,7 @@ class Barbet(TorchApp):
 
         module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks])
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
-        results_df = self.output_results(module.results_df, **kwargs)
+        results_df = self.output_results(module.results_df, **kwargs).copy()
 
         # Add gold values if possible
         if hasattr(self, 'true_values'):
@@ -498,6 +498,8 @@ class Barbet(TorchApp):
                 results_df.loc[:, f'{rank}_true'] = results_df.index.map(self.true_values[rank])
     
         console.print(f"Writing to '{output_csv}'")
+        output_csv = Path(output_csv)
+        output_csv.parent.mkdir(exist_ok=True, parents=True)
         results_df.to_csv(output_csv)
 
         return results_df
