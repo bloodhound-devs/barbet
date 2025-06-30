@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.progress import track
 from torchapp import TorchApp, Param, method, main, tool
 
+from torchapp.modules import GeneralLightningModule
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -17,6 +18,26 @@ if TYPE_CHECKING:
 
 
 console = Console()
+
+# class DebugLightningModule(GeneralLightningModule):
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#     def predict_step(self, x, batch_idx, dataloader_idx=0):
+#         breakpoint()
+#         return super().predict_step(x, batch_idx, dataloader_idx)
+
+# from lightning import Trainer
+# class PredictionTrainer(Trainer):
+#     def predict(self, model, dataloaders=None, return_predictions=True, **kwargs):
+#         print("Using custom prediction logic")
+#         # Optionally call super if you want to modify around the default behavior
+#         results = super().predict(model, dataloaders=dataloaders, return_predictions=return_predictions, **kwargs)
+#         breakpoint()
+#         if not return_predictions:
+#             return None
+#         return results
+
 
 
 class ImageFormat(str, Enum):
@@ -44,6 +65,7 @@ class Barbet(TorchApp):
         memmap: str = None,
         memmap_index: str = None,
         treedict: str = None,
+        stack_size: int = 32,        
         in_memory: bool = False,
         tip_alpha: float = None,
     ) -> None:
@@ -57,6 +79,8 @@ class Barbet(TorchApp):
         from hierarchicalsoftmax import TreeDict
         import numpy as np
         from barbet.data import read_memmap
+
+        self.stack_size = stack_size
 
         print(f"Loading treedict {treedict}")
         individual_treedict = TreeDict.load(treedict)
@@ -95,10 +119,6 @@ class Barbet(TorchApp):
         for accession in self.treedict:
             gene_id = accession.split("/")[-1]
             family_ids.add(gene_id)
-
-        self.gene_id_dict = {
-            family_id: index for index, family_id in enumerate(sorted(family_ids))
-        }
 
     @method
     def model(
@@ -152,7 +172,6 @@ class Barbet(TorchApp):
         validation_partition: int = 0,
         batch_size: int = 4,
         test_partition: int = -1,
-        seq_count: int = 32,
         train_all: bool = False,
     ) -> "Iterable|L.LightningDataModule":
         from barbet.data import BarbetDataModule
@@ -161,15 +180,18 @@ class Barbet(TorchApp):
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
             treedict=self.treedict,
-            gene_id_dict=self.gene_id_dict,
             max_items=max_items,
             batch_size=batch_size,
             num_workers=num_workers,
             validation_partition=validation_partition,
             test_partition=test_partition,
-            seq_count=seq_count,
+            stack_size=self.stack_size,
             train_all=train_all,
         )
+
+    # @method
+    # def module_class(self) :
+    #     return DebugLightningModule
 
     @method
     def extra_hyperparameters(self, embedding_model: str = "") -> dict:
@@ -188,7 +210,7 @@ class Barbet(TorchApp):
         return dict(
             embedding_model=embedding_model,
             classification_tree=self.treedict.classification_tree,
-            gene_id_dict=self.gene_id_dict,
+            stack_size=self.stack_size,
         )
 
     @method
@@ -213,12 +235,11 @@ class Barbet(TorchApp):
         from barbet.data import BarbetPredictionDataset
        
         # Get hyperparameters from checkpoint
-        seq_count = module.hparams.get("seq_count", 32)
+        stack_size = module.hparams.get("stack_size", 32)
         self.classification_tree = module.hparams.classification_tree
 
-        # TODO extract domain from the barbet model
-        domain = "bac120"
-        # domain = "ar53" if len(module.hparams.gene_id_dict) == 53 else "bac120"
+        # extract domain from the model
+        domain = "ar53" if self.classification_tree.name == "d__Archaea" else "bac120"
 
         #######################
         # Create Embeddings
@@ -249,7 +270,7 @@ class Barbet(TorchApp):
         self.prediction_dataset = BarbetPredictionDataset(
             array=embeddings,
             accessions=accessions,
-            seq_count=seq_count,
+            stack_size=stack_size,
             repeats=repeats,
             seed=42,
         )
@@ -489,7 +510,7 @@ class Barbet(TorchApp):
         trainer = self.prediction_trainer(module, **kwargs)
         prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
 
-        results_list = trainer.predict(module, dataloaders=prediction_dataloader)
+        results_list = trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
 
         if not results_list:
             return None
@@ -547,9 +568,8 @@ class Barbet(TorchApp):
         array = read_memmap(memmap, count)
 
         # Get hyperparameters from checkpoint
-        domain = "bac120" if module.model.classifier.out_features > 100_000 else "ar53"
-        seq_count = module.hparams.get("seq_count", 32 if domain == "bac120" else 8)
         self.classification_tree = module.hparams.classification_tree
+        stack_size = module.hparams.get("stack_size", 32)
 
         # If treedict is provided, then we filter the accessions to only those that are in the treedict
         genome_filter = None
@@ -581,7 +601,7 @@ class Barbet(TorchApp):
         self.prediction_dataset = BarbetPredictionDataset(
             array=array,
             accessions=accessions,
-            seq_count=seq_count,
+            stack_size=stack_size,
             repeats=repeats,
             genome_filter=genome_filter,
             seed=42,
@@ -594,3 +614,19 @@ class Barbet(TorchApp):
         )
 
         return dataloader
+
+    @method
+    def monitor(self) -> str:
+        return "genus"
+
+    # @method
+    # def prediction_trainer(self, module) -> 'Trainer':
+    #     """
+    #     Return a Trainer for making predictions. By default, just a brand-new Trainer().
+    #     """
+    #     from lightning import Trainer
+
+    #     # TODO multigpu
+    #     return PredictionTrainer()
+
+

@@ -32,7 +32,7 @@ export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
 DOMAIN=bac120
 #DOMAIN=ar53
-LAYERS=12
+LAYERS=6
 
 
 barbet-esm preprocess \
@@ -40,13 +40,13 @@ barbet-esm preprocess \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}
 
-barbet-esm treedict-representatives.py \
-    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st \
-    /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_reps_r226.tar.gz \
-    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}-reps.st
+#barbet-esm treedict-representatives.py \
+#    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st \
+#    /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_reps_r226.tar.gz \
+##    /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}-reps.st
+#
+#treedict truncate /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st 4 /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    
 
-treedict truncate /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st 4 /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    
-
-treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st
-treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st
-treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    
+#treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS}/esm${LAYERS}.st
+#treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps.st
+#treedict layer-size /data/gpfs/projects/punim2199/preprocessed-r226/$DOMAIN/esm${LAYERS}/esm${LAYERS}-reps-d4.st    

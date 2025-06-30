@@ -6,9 +6,10 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --array=0-119%10
+# SBATCH --array=0-52%16
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 12:00:00
+#SBATCH -t 20:00:00
  
 #SBATCH --mem-per-cpu=12G
  
@@ -33,8 +34,9 @@ export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
 DOMAIN=bac120
 #DOMAIN=ar53
-LAYERS=6
+#LAYERS=6
 #LAYERS=12
+LAYERS=30
 FAMILY_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 
 barbet-esm build-gene-array \
@@ -42,4 +44,5 @@ barbet-esm build-gene-array \
     --marker-genes /data/gpfs/projects/punim2199/gambit_data/release226-partial/${DOMAIN}_marker_genes_all_r226.tar.gz \
     --output-dir /data/gpfs/projects/punim2199/preprocessed-r226/${DOMAIN}/esm${LAYERS} \
     --hub-dir $TORCH_HOME \
+    --max-length 2000 \
     --family-index $FAMILY_INDEX

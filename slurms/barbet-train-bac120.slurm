@@ -8,12 +8,12 @@
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
 #SBATCH -t 7-0:00:00
-# SBATCH -t 4-0:00:00
+# SBATCH -t 1-0:00:00
  
 #SBATCH --mem-per-cpu=64G
  
 # SBATCH -p cascade
-#SBATCH -p gpu-h100,gpu-a100,gpu-a100-short
+#SBATCH -p gpu-h100
 # SBATCH -p gpu-a100-short,gpu-a100,gpu-a100-preempt
 # SBATCH -p gpu-a100-short,gpu-a100
 # SBATCH -p gpu-a100-short
@@ -24,7 +24,6 @@
 #SBATCH --mail-user=robert.turnbull@unimelb.edu.au
 #SBATCH --mail-type=ALL
  
-# Load the environment variables
 module purge
 module load GCCcore/11.3.0
 module load Python/3.10.4
@@ -36,9 +35,10 @@ export HF_HOME=/home/rturnbull/wytamma/huggingface
 
 DOMAIN=bac120
 #DOMAIN=ar53
-ESM_LAYERS=12
 #ESM_LAYERS=6
-#FEATURES=2048
+ESM_LAYERS=12
+#ESM_LAYERS=30
+
 #FEATURES=768
 FEATURES=1536
 #FEATURES=256
@@ -53,7 +53,6 @@ EPOCHS=70
 BATCH=4
 
 
-#PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 
@@ -62,11 +61,11 @@ if [[ ! -s "$MEMMAP" ]]; then
         cp ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy $MEMMAP
 fi
 
-#TREEDICT_NAME=esm${ESM_LAYERS}-reps.st
 TREEDICT_NAME=esm${ESM_LAYERS}.td
-#TREEDICT_NAME=esm${ESM_LAYERS}-reps.st
+#TREEDICT_NAME=esm${ESM_LAYERS}-reps.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 
+RUN_NAME=${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${STACK_SIZE}val0-r226sp
 
 barbet-tools train  \
         --memmap  $MEMMAP \
@@ -77,11 +76,13 @@ barbet-tools train  \
         --growth-factor $GROWTH \
         --max-epochs $EPOCHS \
         --attention-size $ATTENTION \
-        --seq-count $STACK_SIZE \
+        --stack-size $STACK_SIZE \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${STACK_SIZE}val0-r226 \
+        --output-dir outputs/$RUN_NAME \
+        --run-name  $RUN_NAME \
         --num-workers 4 \
+        --project-name Barbet-${DOMAIN} \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 

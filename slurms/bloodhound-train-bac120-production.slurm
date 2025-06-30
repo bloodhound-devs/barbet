@@ -44,7 +44,7 @@ ESM_LAYERS=6
 FEATURES=1536
 #FEATURES=256
 ATTENTION=512
-SEQ_COUNT=32
+STACK_SIZE=32
 
 GROWTH=2
 LAYERS=2
@@ -77,11 +77,11 @@ barbet-tools train  \
         --growth-factor $GROWTH \
         --max-epochs $EPOCHS \
         --attention-size $ATTENTION \
-        --seq-count $SEQ_COUNT \
+        --seq-count $STACK_SIZE \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${SEQ_COUNT}prod-r226 \
+        --run-name  ${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${STACK_SIZE}prod-r226 \
         --num-workers 4 \
         --train-all \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \

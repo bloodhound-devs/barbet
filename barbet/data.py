@@ -49,7 +49,7 @@ class BarbetStack():
 class BarbetPredictionDataset(Dataset):
     array:np.memmap|np.ndarray
     accessions: list[str]
-    seq_count:int
+    stack_size:int
     repeats:int = 2
     seed:int = 42
     stacks: list[BarbetStack] = field(init=False)
@@ -78,7 +78,13 @@ class BarbetPredictionDataset(Dataset):
                 # Finish Remainder
                 genome_array_indices_set = set(genome_array_indices)
                 available = genome_array_indices_set - set(remainder)
-                to_add = random.sample(list(available), self.seq_count - len(remainder))
+                needed = self.stack_size - len(remainder)
+                available_list = list(available)
+
+                if len(available_list) >= needed:
+                    to_add = random.sample(available_list, needed)  # without replacement
+                else:
+                    to_add = random.choices(available_list, k=needed)  # with replacement
                 to_add_set = set(to_add)
                 assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
 
@@ -90,9 +96,9 @@ class BarbetPredictionDataset(Dataset):
                 if repeat_index >= self.repeats:
                     break
 
-                while len(remainder) >= self.seq_count:
-                    self.add_stack(genome, remainder[:self.seq_count])
-                    remainder = remainder[self.seq_count:]
+                while len(remainder) >= self.stack_size:
+                    self.add_stack(genome, remainder[:self.stack_size])
+                    remainder = remainder[self.stack_size:]
                             
     def add_stack(self, genome:str, indices:Iterable[int]) -> BarbetStack:
         """
@@ -112,8 +118,11 @@ class BarbetPredictionDataset(Dataset):
 
         assert len(array_indices) > 0, f"Stack has no array indices"
         with torch.no_grad():
-            data = np.array(self.array[array_indices, :], copy=False)
-            embeddings = torch.tensor(data, dtype=torch.float16)
+            # data = np.array(self.array[array_indices, :], copy=False)
+            # embeddings = torch.tensor(data, dtype=torch.float16)
+            data = np.asarray(self.array[array_indices, :]).copy()
+            embeddings = torch.from_numpy(data).to(torch.float16)
+
             del data
         
         return embeddings
@@ -124,9 +133,8 @@ class BarbetTrainingDataset(Dataset):
     accessions: list[str]
     treedict: TreeDict
     array:np.memmap|np.ndarray
-    gene_id_dict: dict[str, int]
     accession_to_array_index:dict[str,int]|None=None
-    seq_count:int = 0
+    stack_size:int = 0
 
     def __len__(self):
         return len(self.accessions)
@@ -134,8 +142,8 @@ class BarbetTrainingDataset(Dataset):
     def __getitem__(self, idx):
         accession = self.accessions[idx]
         array_indices = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        if self.seq_count:
-            array_indices = choose_k_from_n(array_indices, self.seq_count)
+        if self.stack_size:
+            array_indices = choose_k_from_n(array_indices, self.stack_size)
 
         assert len(array_indices) > 0, f"Accession {accession} has no array indices"
         with torch.no_grad():
@@ -148,7 +156,6 @@ class BarbetTrainingDataset(Dataset):
         node_id = int(seq_detail.node_id)
         del seq_detail
         
-        # return embedding, self.gene_id_dict[gene_id], self.treedict[self.accessions[0]].node_id # hack
         return embedding, node_id
     
 
@@ -158,7 +165,6 @@ class BarbetDataModule(L.LightningDataModule):
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
     accession_to_array_index:dict[str,int]
-    gene_id_dict: dict[str,int]
     max_items: int = 0
     batch_size: int = 16
     num_workers: int = 0
@@ -171,26 +177,24 @@ class BarbetDataModule(L.LightningDataModule):
         treedict: TreeDict,
         array:np.memmap|np.ndarray,
         accession_to_array_index:dict[str,list[int]],
-        gene_id_dict: dict[str,int],
         max_items: int = 0,
         batch_size: int = 16,
         num_workers: int = None,
         validation_partition:int = 0,
         test_partition:int=-1,
-        seq_count:int=0,
+        stack_size:int=0,
         train_all:bool=False,
     ):
         super().__init__()
         self.array = array
         self.accession_to_array_index = accession_to_array_index
         self.treedict = treedict
-        self.gene_id_dict = gene_id_dict
         self.max_items = max_items
         self.batch_size = batch_size
         self.validation_partition = validation_partition
         self.test_partition = test_partition
         self.num_workers = min(os.cpu_count(), 8) if num_workers is None else num_workers
-        self.seq_count = seq_count
+        self.stack_size = stack_size
         self.train_all = train_all
 
     def setup(self, stage=None):
@@ -222,8 +226,7 @@ class BarbetDataModule(L.LightningDataModule):
             treedict=self.treedict, 
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
-            gene_id_dict=self.gene_id_dict,
-            seq_count=self.seq_count,
+            stack_size=self.stack_size,
         )
     
     def train_dataloader(self):

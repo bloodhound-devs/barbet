@@ -381,6 +381,7 @@ class Embedding(CLIApp, ABC):
         output_dir:Path=typer.Option(default=..., help="A directory to store the output which includes the memmap array, the listing of accessions and an error log."),
         partitions:int=typer.Option(default=5, help="The number of cross-validation partitions."),
         seed:int=typer.Option(default=42, help="The random seed."),
+        treedict_only:bool=typer.Option(default=False, help="Only output TreeDict file and then exit before concatenating memmap array"),
     ):
         treedict, accession_to_node = self.build_treedict(taxonomy)
 
@@ -412,9 +413,9 @@ class Embedding(CLIApp, ABC):
                 counts.append(len(family_index_keys))
 
                 for key in family_index_keys:
-                    species_accession = key.split("/")[0]
-                    node = accession_to_node[species_accession]
-                    partition = node_to_partition_dict.setdefault(key, random.randint(0, partitions - 1))
+                    genome_accession = key.split("/")[0]
+                    node = accession_to_node[genome_accession]
+                    partition = node_to_partition_dict.setdefault(node, random.randint(0, partitions - 1))
 
                     # Add to treedict
                     treedict.add(key, node, partition)
@@ -422,9 +423,12 @@ class Embedding(CLIApp, ABC):
         assert len(counts) == family_count
 
         # Save treedict
-        treedict_path = output_dir / f"{output_dir.name}.st"
-        print(f"Saving treedict to {treedict_path}")
+        treedict_path = output_dir / f"{output_dir.name}.td"
+        print(f"Saving TreeDict to {treedict_path}")
         treedict.save(treedict_path)
+
+        if treedict_only:
+            return
 
         # Concatenate numpy memmap arrays
         memmap_array = None
