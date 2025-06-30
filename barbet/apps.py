@@ -495,7 +495,7 @@ class Barbet(TorchApp):
         if hasattr(self, 'true_values'):
             from barbet.data import RANKS
             for rank in RANKS:
-                results_df[f'{rank}_true'] = results_df.index.map(self.true_values[rank])
+                results_df.loc[:, f'{rank}_true'] = results_df.index.map(self.true_values[rank])
     
         console.print(f"Writing to '{output_csv}'")
         results_df.to_csv(output_csv)

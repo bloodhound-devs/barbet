@@ -1,5 +1,7 @@
+import gc
 from torchapp.modules import GeneralLightningModule
 import pandas as pd
+import torch
 from hierarchicalsoftmax.inference import (
     node_probabilities,
     greedy_predictions,
@@ -17,38 +19,54 @@ class BarbetLightningModule(GeneralLightningModule):
     def setup_prediction(self, barbet, names:list[str]|str):
         self.names = names
         self.classification_tree = self.hparams.classification_tree
-        self.results_df = None
+        self.batch_dfs = []
         self.counter = 0
         self.category_names = [
             barbet.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root
         ]
 
     def on_predict_batch_end(self, results, batch, batch_idx, dataloader_idx=0):
-        classification_probabilities = node_probabilities(
-            results.cpu(), 
-            root=self.classification_tree,
-        )
-
         results_df = pd.DataFrame(
-            classification_probabilities.numpy(), 
+            results.cpu().numpy(), 
             columns=self.category_names,
         )
+        batch_size = len(results)
         results_df["name"] = (
             self.names if isinstance(self.names, str) 
-            else self.names[self.counter:self.counter+len(classification_probabilities)]
+            else self.names[self.counter:self.counter+batch_size]
         )
+        self.counter += batch_size
         results_df["counts"] = 1
         results_df = results_df.groupby(["name"]).sum()
+        self.batch_dfs.append(results_df)
 
-        if self.results_df is None:
-            self.results_df = results_df
-        else:
-            self.results_df = self.results_df.add(results_df, fill_value=0)
+        # if self.results_df is None:
+        #     self.results_df = results_df
+        # else:
+        #     self.results_df = self.results_df.add(results_df, fill_value=0)
 
     def on_predict_epoch_end(self):
+        self.results_df = pd.concat(self.batch_dfs).groupby(level=0).sum()
+        del self.batch_dfs
+        gc.collect()
+
         # Divide by counts to get average
         counts = self.results_df["counts"]
         self.results_df = self.results_df.drop(columns=["counts"]).div(counts, axis=0)
+        gc.collect()
+
+        # Convert to probabilities
+        probabilities = node_probabilities(
+            torch.as_tensor(self.results_df[self.category_names].to_numpy()), 
+            root=self.classification_tree,
+        )
+        self.results_df = pd.DataFrame(
+            probabilities, 
+            columns=self.category_names,
+            index=self.results_df.index,
+        )
+        gc.collect()
+
 
 
         
