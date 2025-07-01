@@ -1,6 +1,7 @@
 import gc
 from torchapp.modules import GeneralLightningModule
-import pandas as pd
+# import pandas as pd
+import polars as pl
 import torch
 from hierarchicalsoftmax.inference import (
     node_probabilities,
@@ -26,44 +27,58 @@ class BarbetLightningModule(GeneralLightningModule):
         ]
 
     def on_predict_batch_end(self, results, batch, batch_idx, dataloader_idx=0):
-        results_df = pd.DataFrame(
-            results.cpu().numpy(), 
-            columns=self.category_names,
-        )
+        data = results.cpu().numpy()
+        results_df = pl.DataFrame(data, schema=self.category_names)
+
         batch_size = len(results)
-        results_df["name"] = (
-            self.names if isinstance(self.names, str) 
-            else self.names[self.counter:self.counter+batch_size]
+        names = (
+            self.names if isinstance(self.names, str)
+            else self.names[self.counter : self.counter + batch_size]
         )
         self.counter += batch_size
-        results_df["counts"] = 1
-        results_df = results_df.groupby(["name"]).sum()
+        
+        results_df = results_df.with_columns([
+            pl.Series("name", names),
+            pl.lit(1).alias("counts"),
+        ])
+
+        # Group by name and sum predictions and counts
+        results_df = results_df.group_by("name", maintain_order=True).sum()
         self.batch_dfs.append(results_df)
 
-        # Concatenate and group every 200 batches to save memory
-        if batch_idx and batch_idx % 200 == 0:
-            self.batch_dfs = [pd.concat(self.batch_dfs).groupby(level=0).sum()]
-            
+        # Concatenate and group every n batches to save memory
+        # if batch_idx and batch_idx % 1000 == 0:
+        #     grouped = pl.concat(self.batch_dfs).group_by("name").sum()
+        #     self.batch_dfs = [grouped]
+        #     gc.collect()
+
     def on_predict_epoch_end(self):
-        self.results_df = pd.concat(self.batch_dfs).groupby(level=0).sum()
+        results_df = pl.concat(self.batch_dfs).group_by("name").sum()
         del self.batch_dfs
         gc.collect()
 
         # Divide by counts to get average
-        counts = self.results_df["counts"]
-        self.results_df = self.results_df.drop(columns=["counts"]).div(counts, axis=0)
+        count_series = results_df["counts"]
+        results_df = results_df.drop("counts")
+        for col in self.category_names:
+            results_df = results_df.with_columns([
+                (pl.col(col) / count_series).alias(col)
+            ])
         gc.collect()
 
         # Convert to probabilities
         probabilities = node_probabilities(
-            torch.as_tensor(self.results_df[self.category_names].to_numpy()), 
+            torch.as_tensor(results_df[self.category_names].to_numpy()), 
             root=self.classification_tree,
         )
-        self.results_df = pd.DataFrame(
-            probabilities, 
-            columns=self.category_names,
-            index=self.results_df.index,
-        )
+        self.results_df = pl.DataFrame(
+            data=probabilities,
+            schema=self.category_names
+        ).with_columns([
+            pl.Series("name", results_df["name"])
+        ]).with_columns([
+            pl.col("name").cast(pl.Utf8)
+        ]).select(["name", *self.category_names])
         gc.collect()
 
 

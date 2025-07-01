@@ -13,7 +13,8 @@ if TYPE_CHECKING:
     from hierarchicalsoftmax import SoftmaxNode
     from torch import nn
     import lightning as L
-    import pandas as pd
+    # import pandas as pd
+    import polars as pl
 
 
 console = Console()
@@ -295,8 +296,9 @@ class Barbet(TorchApp):
         image_threshold: float = 0.005,
         probabilities: bool = Param(default=False, help="If True, include probabilities for all the nodes in the taxonomic tree."),
         **kwargs,
-    ) -> "pd.DataFrame":
+    ) -> "pl.DataFrame":
         import torch
+        import polars as pl
         from hierarchicalsoftmax.inference import (
             greedy_predictions,
             render_probabilities,
@@ -322,21 +324,43 @@ class Barbet(TorchApp):
             threshold=threshold,
         )
 
-        output_columns = []
-        for rank in RANKS:
-            output_columns += [f"{rank}_prediction", f"{rank}_probability"]
-            results_df[f"{rank}_prediction"] = ""
-            results_df[f"{rank}_probability"] = 0.0
+        # Prepare column names and initialize empty lists
+        output_columns = ['name']
+        new_cols = {}
 
-        for index, node in zip(results_df.index, predictions):
-            lineage = node.ancestors[1:] + (node,)
+        for rank in RANKS:
+            pred_col = f"{rank}_prediction"
+            prob_col = f"{rank}_probability"
+            output_columns += [pred_col, prob_col]
+            new_cols[pred_col] = []
+            new_cols[prob_col] = []
+
+        # Prepare essentials
+        names = results_df["name"].to_list()
+        num_rows = results_df.height
+
+        # Efficient row-by-row access
+        for i in range(num_rows):
+            prediction_node = predictions[i]
+            lineage = prediction_node.ancestors[1:] + (prediction_node,)
             probability = 1.0
+
             for rank, lineage_node in zip(RANKS, lineage):
                 node_name = self.node_to_str(lineage_node)
-                results_df.loc[index, f"{rank}_prediction"] = node_name
-                if node_name in category_names_set:
-                    probability = results_df.loc[index,node_name]
-                results_df.loc[index, f"{rank}_probability"] = probability
+                pred_col = f"{rank}_prediction"
+                prob_col = f"{rank}_probability"
+
+                new_cols[pred_col].append(node_name)
+
+                if node_name in results_df.columns:
+                    probability = results_df[node_name][i]
+
+                new_cols[prob_col].append(probability)
+
+        # Add new columns to the Polars DataFrame
+        results_df = results_df.with_columns(
+            [pl.Series(name, values) for name, values in new_cols.items()]
+        )
 
         # Output images
         if image_format:
@@ -390,7 +414,8 @@ class Barbet(TorchApp):
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
         import torch
-        import pandas as pd
+        # import pandas as pd
+        import polars as pl
         from itertools import chain
         from barbet.markers import extract_markers_genes
 
@@ -456,12 +481,12 @@ class Barbet(TorchApp):
             if total_df is None:
                 total_df = results_df
                 if output_csv:
-                    results_df.to_csv(output_csv)
+                    results_df.write_csv(output_csv)
             else:
-                total_df = pd.concat([total_df, results_df], axis=0).reset_index(drop=True)
+                total_df = pl.concat([total_df, results_df], how="vertical")
 
                 if output_csv:
-                    results_df.to_csv(output_csv, mode="a", header=False)
+                    results_df.write_csv(output_csv, mode="a", include_header=False)
 
         console.print(total_df[["species_prediction", "species_probability"]])
         console.print(f"Saved to: '{output_csv}'")
@@ -489,18 +514,25 @@ class Barbet(TorchApp):
 
         module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks])
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
-        results_df = self.output_results(module.results_df, **kwargs).copy()
+        results_df = self.output_results(module.results_df, **kwargs)
 
         # Add gold values if possible
         if hasattr(self, 'true_values'):
             from barbet.data import RANKS
+            import polars as pl
+
+            name_col = results_df["name"]
             for rank in RANKS:
-                results_df.loc[:, f'{rank}_true'] = results_df.index.map(self.true_values[rank])
+                mapping_dict = self.true_values[rank]
+
+                results_df = results_df.with_columns(
+                    pl.col("name").map_elements(mapping_dict.get, return_dtype=pl.Utf8).alias(f"{rank}_true")
+                )
     
         console.print(f"Writing to '{output_csv}'")
         output_csv = Path(output_csv)
         output_csv.parent.mkdir(exist_ok=True, parents=True)
-        results_df.to_csv(output_csv)
+        results_df.write_csv(output_csv)
 
         return results_df
     

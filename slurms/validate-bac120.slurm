@@ -32,10 +32,14 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
 
+MAX_REPEATS=4
+PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 DOMAIN=bac120
+
+
+
 ESM_LAYERS=6
 FEATURES=768
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -44,16 +48,45 @@ RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s
 VERSION=$(ls -r1 outputs/$RUN_NAME/lightning_logs)
 CHECKPOINT=$(ls -1 outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
 
-MAX_REPEATS=4
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
-    barbet-tools predict-memmap \
-            --checkpoint $CHECKPOINT \
-            --memmap  $MEMMAP \
-            --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
-            --treedict $TREEDICT \
-            --treedict-partition 0 \
-            --repeats $REPEATS \
-            --num-workers 1 \
-            --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
+        barbet-tools predict-memmap \
+                --checkpoint $CHECKPOINT \
+                --memmap  $MEMMAP \
+                --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
+                --treedict $TREEDICT \
+                --treedict-partition 0 \
+                --repeats $REPEATS \
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
+done
+
+
+
+ESM_LAYERS=12
+FEATURES=768
+MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
+TREEDICT_NAME=esm${ESM_LAYERS}.td
+TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
+
+RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s32val0-r226sp
+VERSION=$(ls -r1 outputs/$RUN_NAME/lightning_logs)
+CHECKPOINT=$(ls -1 outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
+
+for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
+        barbet-tools predict-memmap \
+                --checkpoint $CHECKPOINT \
+                --memmap  $MEMMAP \
+                --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
+                --treedict $TREEDICT \
+                --treedict-partition 0 \
+                --repeats $REPEATS \
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 

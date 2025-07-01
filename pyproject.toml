@@ -24,6 +24,7 @@ hierarchicalsoftmax = ">=1.4.1"
 biopython = ">=1.79"
 torch = "=2.2.0"
 lightning = ">=2.3.3"
+polars = "^1.31.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6.2.5"
