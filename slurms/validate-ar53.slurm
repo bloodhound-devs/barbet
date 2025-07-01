@@ -31,6 +31,7 @@ source /data/gpfs/projects/punim2199/rob/barbet/.venv/bin/activate
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
+MAX_REPEATS=1
 MAX_REPEATS=4
 
 

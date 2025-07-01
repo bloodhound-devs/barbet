@@ -588,7 +588,7 @@ class Barbet(TorchApp):
             from barbet.data import RANKS
 
             genome_filter = set()
-            console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
+            console.print(f"Creating filter using partition '{treedict_partition}' from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
             self.true_values = defaultdict(dict)
             
