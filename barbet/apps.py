@@ -503,11 +503,10 @@ class Barbet(TorchApp):
         output_csv: Path = Param(
             default=None, help="A path to output the results as a CSV."
         ),
+        treedict:Path = Param(None, help="A path to a TreeDict with the ground truth lineage."),
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
-        import torch
-
         module = self.load_checkpoint(**kwargs)
         trainer = self.prediction_trainer(module, **kwargs)
         prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
@@ -516,12 +515,28 @@ class Barbet(TorchApp):
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
         results_df = self.output_results(module.results_df, **kwargs)
 
-        # Add gold values if possible
-        if hasattr(self, 'true_values'):
+        genome_name_set = set(results_df['genome'].unique())
+
+        if treedict is not None:
+            from hierarchicalsoftmax import TreeDict
             from barbet.data import RANKS
             import polars as pl
 
-            name_col = results_df["name"]
+            true_values = defaultdict(lambda: dict)
+
+            console.print(f"Adding true values from TreeDict '{treedict}'")
+            treedict = TreeDict.load(treedict)
+            
+            # Get lineage to map
+            for accession, _ in treedict.items():
+                genome_name = accession.split("/")[0]
+                if genome_name in genome_name_set:
+                    node = treedict.node(accession)
+                    lineage = node.ancestors[1:] + (node,)
+                    for rank, lineage_node in zip(RANKS, lineage):
+                        true_values[rank][genome_name] = lineage_node.name.strip()
+
+
             for rank in RANKS:
                 mapping_dict = self.true_values[rank]
 
@@ -550,8 +565,7 @@ class Barbet(TorchApp):
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
         ),
-        treedict:Path=Param(None, help="A path to the treedict file to use for filtering genomes. (Must be used with `treedict_partition`)"),
-        treedict_partition:int= Param(None, help="The partition of the treedict to use for filtering genomes. (Must be used with `treedict`.)"),
+        genomes:Path=Param(None, help="A path to a text file with the accessions for the genome to use."),
         **kwargs,
     ) -> "Iterable":
         from barbet.data import read_memmap
@@ -579,30 +593,9 @@ class Barbet(TorchApp):
 
         # If treedict is provided, then we filter the accessions to only those that are in the treedict
         genome_filter = None
-        if treedict is None and treedict_partition is not None:
-            print("If you provide a `treedict_partition` then you must also provide a `treedict`")
-        if treedict is not None and treedict_partition is None:
-            print("If you provide a `treedict` then you must also provide a `treedict_partition`")
-        if treedict is not None and treedict_partition is not None:
-            from hierarchicalsoftmax import TreeDict
-            from barbet.data import RANKS
-
-            genome_filter = set()
-            console.print(f"Creating filter using partition {treedict_partition} from TreeDict '{treedict}'")
-            treedict = TreeDict.load(treedict)
-            self.true_values = defaultdict(dict)
-            
-            for accession, details in treedict.items():
-                partition = details.partition
-                if partition == treedict_partition:
-                    organism_name = accession.split("/")[0]
-                    genome_filter.add(organism_name)
-                    node = treedict.node(accession)
-                    lineage = node.ancestors[1:] + (node,)
-                    for rank, lineage_node in zip(RANKS, lineage):
-                        self.true_values[rank][organism_name] = lineage_node.name.strip()
-
-            console.print(f"Filtering for {len(genome_filter)} genomes")
+        if genomes:
+            assert genomes.exists(), f"Genomes file does not exist: {genomes}"
+            genome_filter = set(Path(genomes).read_text().strip().split("\n"))
 
         self.prediction_dataset = BarbetPredictionDataset(
             array=array,
@@ -624,15 +617,5 @@ class Barbet(TorchApp):
     @method
     def monitor(self) -> str:
         return "genus"
-
-    # @method
-    # def prediction_trainer(self, module) -> 'Trainer':
-    #     """
-    #     Return a Trainer for making predictions. By default, just a brand-new Trainer().
-    #     """
-    #     from lightning import Trainer
-
-    #     # TODO multigpu
-    #     return PredictionTrainer()
 
 
