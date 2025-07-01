@@ -79,6 +79,7 @@ class BarbetLightningModule(GeneralLightningModule):
         ]).with_columns([
             pl.col("name").cast(pl.Utf8)
         ]).select(["name", *self.category_names])
+        print("Complete")
 
         del probabilities
         gc.collect()

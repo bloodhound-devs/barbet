@@ -311,7 +311,6 @@ class Barbet(TorchApp):
         category_names = [
             self.node_to_str(node) for node in node_list if not node.is_root
         ]
-        category_names_set = set(category_names)
 
         classification_probabilities = torch.as_tensor(
             results_df[category_names].to_numpy()
@@ -336,10 +335,8 @@ class Barbet(TorchApp):
             new_cols[prob_col] = []
 
         # Prepare essentials
-        names = results_df["name"].to_list()
         num_rows = results_df.height
 
-        # Efficient row-by-row access
         for i in range(num_rows):
             prediction_node = predictions[i]
             lineage = prediction_node.ancestors[1:] + (prediction_node,)
@@ -513,6 +510,7 @@ class Barbet(TorchApp):
 
         module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks])
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
+        print("Postprocessing results...")
         results_df = self.output_results(module.results_df, **kwargs)
 
         genome_name_set = set(results_df['name'].unique())
