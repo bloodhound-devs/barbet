@@ -51,7 +51,7 @@ class BarbetLightningModule(GeneralLightningModule):
             self.counter += batch_size
 
     def on_predict_epoch_end(self):
-        print("Consolidating results per genome")
+        print("Consolidating results per genome...")
         names = list(self.logits.keys())
         logits = torch.stack([
             self.logits[name] / self.counts[name] for name in names
@@ -61,7 +61,7 @@ class BarbetLightningModule(GeneralLightningModule):
         gc.collect()
 
         # Convert to probabilities
-        print("Converting to probabilities")
+        print("Converting to probabilities...")
         probabilities = node_probabilities(
             logits, 
             root=self.classification_tree,
@@ -70,7 +70,7 @@ class BarbetLightningModule(GeneralLightningModule):
         del logits
         gc.collect()
 
-        print("Saving in dataframe")
+        print("Saving in dataframe...")
         self.results_df = pl.DataFrame(
             data=probabilities,
             schema=self.category_names
@@ -79,7 +79,8 @@ class BarbetLightningModule(GeneralLightningModule):
         ]).with_columns([
             pl.col("name").cast(pl.Utf8)
         ]).select(["name", *self.category_names])
-        print("Complete")
+        
+        print("Concluding prediction step...")
 
         del probabilities
         gc.collect()
