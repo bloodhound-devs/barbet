@@ -47,7 +47,8 @@ TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
 RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s32val0-r226sp
 VERSION=$(ls -r1 outputs/$RUN_NAME/lightning_logs)
 CHECKPOINT=$(ls -1 outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
-
+GENOMES=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/validation-genomes-0.txt
+MAX_REPEATS=1
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
     OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
     if [ ! -s "$OUTPUT" ]; then
@@ -56,7 +57,7 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
                 --num-workers 4 \
                 --output-csv $OUTPUT
