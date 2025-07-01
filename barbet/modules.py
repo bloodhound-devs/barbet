@@ -3,6 +3,7 @@ from torchapp.modules import GeneralLightningModule
 # import pandas as pd
 import polars as pl
 import torch
+from collections import defaultdict
 from hierarchicalsoftmax.inference import (
     node_probabilities,
     greedy_predictions,
@@ -20,13 +21,22 @@ class BarbetLightningModule(GeneralLightningModule):
     def setup_prediction(self, barbet, names:list[str]|str):
         self.names = names
         self.classification_tree = self.hparams.classification_tree
-        self.batch_dfs = []
+        self.logits = defaultdict(lambda: 0.0)
+        self.counts = defaultdict(lambda: 0)
         self.counter = 0
         self.category_names = [
             barbet.node_to_str(node) for node in self.classification_tree.node_list_softmax if not node.is_root
         ]
 
     def on_predict_batch_end(self, results, batch, batch_idx, dataloader_idx=0):
+        batch_size = len(results)
+        if isinstance(self.names, str):
+            self.counts[self.names] += batch_size
+            self.logis[self.names] += results.sum(dim=0).cpu()
+        else:
+            raise NotImplementedError
+            
+        current_name
         data = results.cpu().numpy()
         results_df = pl.DataFrame(data, schema=self.category_names)
 
