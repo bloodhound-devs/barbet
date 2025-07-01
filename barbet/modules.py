@@ -34,58 +34,36 @@ class BarbetLightningModule(GeneralLightningModule):
             self.counts[self.names] += batch_size
             self.logis[self.names] += results.sum(dim=0).cpu()
         else:
-            raise NotImplementedError
+            prev_name = self.names[self.counter]
+            start_i = 0
+            for end_i in range(batch_size):
+                current_name = self.names[self.counter + end_i]
+                if current_name != prev_name:
+                    self.counts[prev_name] += (end_i - start_i)
+                    self.logits[prev_name] += results[start_i:end_i].sum(dim=0).cpu()
+                    start_i = end_i
+                    prev_name = current_name
             
-        current_name
-        data = results.cpu().numpy()
-        results_df = pl.DataFrame(data, schema=self.category_names)
-
-        batch_size = len(results)
-        names = (
-            self.names if isinstance(self.names, str)
-            else self.names[self.counter : self.counter + batch_size]
-        )
-        self.counter += batch_size
-        
-        results_df = results_df.with_columns([
-            pl.Series("name", names),
-            pl.lit(1).alias("counts"),
-        ])
-
-        # Group by name and sum predictions and counts
-        results_df = results_df.group_by("name", maintain_order=True).sum()
-        self.batch_dfs.append(results_df)
-
-        # Concatenate and group every n batches to save memory
-        # if batch_idx and batch_idx % 1000 == 0:
-        #     grouped = pl.concat(self.batch_dfs).group_by("name").sum()
-        #     self.batch_dfs = [grouped]
-        #     gc.collect()
+            # Handle the last chunk
+            assert start_i < batch_size, "Start index should be less than batch size"
+            self.logits[prev_name] += results[start_i:].sum(dim=0).cpu()
+            self.counts[prev_name] += (batch_size - start_i)
 
     def on_predict_epoch_end(self):
-        results_df = pl.concat(self.batch_dfs).group_by("name").sum()
-        del self.batch_dfs
-        gc.collect()
-
-        # Divide by counts to get average
-        count_series = results_df["counts"]
-        results_df = results_df.drop("counts")
-        for col in self.category_names:
-            results_df = results_df.with_columns([
-                (pl.col(col) / count_series).alias(col)
-            ])
-        gc.collect()
+        logits = torch.stack([
+            self.logits[name] / self.counts[name] for name in self.names
+        ], dim=0)
 
         # Convert to probabilities
         probabilities = node_probabilities(
-            torch.as_tensor(results_df[self.category_names].to_numpy()), 
+            logits, 
             root=self.classification_tree,
         )
         self.results_df = pl.DataFrame(
             data=probabilities,
             schema=self.category_names
         ).with_columns([
-            pl.Series("name", results_df["name"])
+            pl.Series("name", self.names, dtype=pl.Utf8)
         ]).with_columns([
             pl.col("name").cast(pl.Utf8)
         ]).select(["name", *self.category_names])
