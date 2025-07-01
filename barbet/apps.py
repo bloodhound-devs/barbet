@@ -515,14 +515,14 @@ class Barbet(TorchApp):
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
         results_df = self.output_results(module.results_df, **kwargs)
 
-        genome_name_set = set(results_df['genome'].unique())
+        genome_name_set = set(results_df['name'].unique())
 
         if treedict is not None:
             from hierarchicalsoftmax import TreeDict
             from barbet.data import RANKS
             import polars as pl
 
-            true_values = defaultdict(lambda: dict)
+            true_values = defaultdict(dict)
 
             console.print(f"Adding true values from TreeDict '{treedict}'")
             treedict = TreeDict.load(treedict)
@@ -538,10 +538,8 @@ class Barbet(TorchApp):
 
 
             for rank in RANKS:
-                mapping_dict = self.true_values[rank]
-
                 results_df = results_df.with_columns(
-                    pl.col("name").map_elements(mapping_dict.get, return_dtype=pl.Utf8).alias(f"{rank}_true")
+                    pl.col("name").map_elements(true_values[rank].get, return_dtype=pl.Utf8).alias(f"{rank}_true")
                 )
     
         console.print(f"Writing to '{output_csv}'")

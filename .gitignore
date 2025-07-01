@@ -185,3 +185,4 @@ esm_accuracy.html
 genus_validation.pdf
 genus_validation.png
 roc.py
+valid-ar53.sh
