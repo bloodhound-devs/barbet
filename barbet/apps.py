@@ -414,7 +414,6 @@ class Barbet(TorchApp):
 
         module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks], save_probabilities=probabilities)
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
-        print("Postprocessing results...")
         results_df = module.results_df
 
         genome_name_set = set(results_df['name'].unique())
@@ -430,7 +429,7 @@ class Barbet(TorchApp):
             treedict = TreeDict.load(treedict)
             
             # Get lineage to map
-            for accession, _ in treedict.items():
+            for accession in track(treedict.keys()):
                 genome_name = accession.split("/")[0]
                 if genome_name in genome_name_set:
                     node = treedict.node(accession)
