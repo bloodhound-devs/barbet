@@ -283,108 +283,10 @@ class Barbet(TorchApp):
         """
         return str(node).split(",")[-1].strip()
 
-    @method
-    def output_results(
-        self,
-        results_df,
-        threshold: float = Param(
-            default=0.0, help="The threshold value for making hierarchical predictions."
-        ),
-        image_format: ImageFormat = Param(
-            default="", help="A path to output the results as images."
-        ),
-        image_threshold: float = 0.005,
-        probabilities: bool = Param(default=False, help="If True, include probabilities for all the nodes in the taxonomic tree."),
-        **kwargs,
-    ) -> "pl.DataFrame":
-        import torch
-        import polars as pl
-        from hierarchicalsoftmax.inference import (
-            greedy_predictions,
-            render_probabilities,
-        )
-        from barbet.data import RANKS
-
-        assert self.classification_tree
-
-        node_list = self.classification_tree.node_list_softmax
-        category_names = [
-            self.node_to_str(node) for node in node_list if not node.is_root
-        ]
-
-        classification_probabilities = torch.as_tensor(
-            results_df[category_names].to_numpy()
-        )
-
-        # get greedy predictions which can use the raw activation or the softmax probabilities
-        predictions = greedy_predictions(
-            classification_probabilities,
-            root=self.classification_tree,
-            threshold=threshold,
-        )
-
-        # Prepare column names and initialize empty lists
-        output_columns = ['name']
-        new_cols = {}
-
-        for rank in RANKS:
-            pred_col = f"{rank}_prediction"
-            prob_col = f"{rank}_probability"
-            output_columns += [pred_col, prob_col]
-            new_cols[pred_col] = []
-            new_cols[prob_col] = []
-
-        # Prepare essentials
-        num_rows = results_df.height
-
-        for i in range(num_rows):
-            prediction_node = predictions[i]
-            lineage = prediction_node.ancestors[1:] + (prediction_node,)
-            probability = 1.0
-
-            for rank, lineage_node in zip(RANKS, lineage):
-                node_name = self.node_to_str(lineage_node)
-                pred_col = f"{rank}_prediction"
-                prob_col = f"{rank}_probability"
-
-                new_cols[pred_col].append(node_name)
-
-                if node_name in results_df.columns:
-                    probability = results_df[node_name][i]
-
-                new_cols[prob_col].append(probability)
-
-        # Add new columns to the Polars DataFrame
-        results_df = results_df.with_columns(
-            [pl.Series(name, values) for name, values in new_cols.items()]
-        )
-
-        # Output images
-        if image_format:
-            console.print(
-                f"Writing inference probability renders to: {self.output_dir}"
-            )
-            output_dir = Path(self.output_dir)
-            image_paths = [output_dir / f"{name}.{image_format}" for name in results_df.index]
-            render_probabilities(
-                root=self.classification_tree,
-                filepaths=image_paths,
-                probabilities=classification_probabilities,
-                predictions=predictions,
-                threshold=image_threshold,
-            )
-
-        if probabilities:
-            output_columns += category_names
-        results_df = results_df[output_columns]
-
-        return results_df
-
     @main(
         "load_checkpoint",
         "prediction_trainer",
         "prediction_dataloader",
-        "output_results",
     )
     def predict(
         self,
@@ -473,7 +375,7 @@ class Barbet(TorchApp):
             prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, **kwargs)
             module.setup_prediction(self, genome_path.name)
             trainer.predict(module, dataloaders=prediction_dataloader)
-            results_df = self.output_results(module.results_df, **kwargs)
+            results_df = module.results_df
 
             if total_df is None:
                 total_df = results_df
@@ -493,7 +395,6 @@ class Barbet(TorchApp):
         "load_checkpoint",
         "prediction_trainer",
         "prediction_dataloader_memmap",
-        "output_results",
     )
     def predict_memmap(
         self,
@@ -501,6 +402,9 @@ class Barbet(TorchApp):
             default=None, help="A path to output the results as a CSV."
         ),
         treedict:Path = Param(None, help="A path to a TreeDict with the ground truth lineage."),
+        probabilities: bool = Param(
+            default=False, help="If True, include probabilities for all the nodes in the taxonomic tree."
+        ),
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
@@ -508,10 +412,10 @@ class Barbet(TorchApp):
         trainer = self.prediction_trainer(module, **kwargs)
         prediction_dataloader = self.prediction_dataloader_memmap(module, **kwargs)
 
-        module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks])
+        module.setup_prediction(self, [stack.genome for stack in self.prediction_dataset.stacks], save_probabilities=probabilities)
         trainer.predict(module, dataloaders=prediction_dataloader, return_predictions=False)
         print("Postprocessing results...")
-        results_df = self.output_results(module.results_df, **kwargs)
+        results_df = module.results_df
 
         genome_name_set = set(results_df['name'].unique())
 
