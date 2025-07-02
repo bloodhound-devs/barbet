@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.progress import track
 from torchapp import TorchApp, Param, method, main, tool
 
+from .output import print_polars_df
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -20,16 +21,6 @@ if TYPE_CHECKING:
 console = Console()
 
 
-# from lightning import Trainer
-# class PredictionTrainer(Trainer):
-#     def predict(self, model, dataloaders=None, return_predictions=True, **kwargs):
-#         print("Using custom prediction logic")
-#         # Optionally call super if you want to modify around the default behavior
-#         results = super().predict(model, dataloaders=dataloaders, return_predictions=return_predictions, **kwargs)
-#         breakpoint()
-#         if not return_predictions:
-#             return None
-#         return results
 
 
 
@@ -387,7 +378,10 @@ class Barbet(TorchApp):
                 if output_csv:
                     results_df.write_csv(output_csv, mode="a", include_header=False)
 
-        console.print(total_df[["species_prediction", "species_probability"]])
+        print_polars_df(
+            total_df[["name", "species_prediction", "species_probability", ]],
+            column_names=["Genome", "Species", "Probability"],
+        )
         console.print(f"Saved to: '{output_csv}'")
         return total_df
 
