@@ -303,7 +303,6 @@ class Barbet(TorchApp):
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
-        import torch
         # import pandas as pd
         import polars as pl
         from itertools import chain
@@ -376,7 +375,8 @@ class Barbet(TorchApp):
                 total_df = pl.concat([total_df, results_df], how="vertical")
 
                 if output_csv:
-                    results_df.write_csv(output_csv, mode="a", include_header=False)
+                    with open(output_csv, mode="a") as f:
+                        results_df.write_csv(f, include_header=False)
 
         print_polars_df(
             total_df[["name", "species_prediction", "species_probability", ]],
