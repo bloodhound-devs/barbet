@@ -204,7 +204,12 @@ class Barbet(TorchApp):
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
-        cpus: int = 1,
+        cpus: int = Param(
+            1, help="The number of CPUs to use for the prediction dataloader."
+        ),
+        dataloader_workers: int = Param(
+            4, help="The number of workers to use for the dataloader."
+        ),
         repeats: int = Param(
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
@@ -262,7 +267,7 @@ class Barbet(TorchApp):
         dataloader = DataLoader(
             self.prediction_dataset,
             batch_size=batch_size,
-            num_workers=cpus,
+            num_workers=dataloader_workers,
             shuffle=False,
         )
 
