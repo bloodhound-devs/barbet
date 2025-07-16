@@ -508,7 +508,13 @@ class Barbet(TorchApp):
         return dataloader
 
     @method
-    def monitor(self) -> str:
+    def monitor(
+        self,
+        train_all: bool = False,
+        **kwargs,
+    ) -> str:
+        if train_all:
+            return "valid_loss"
         return "genus"
 
 
