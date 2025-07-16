@@ -21,9 +21,6 @@ if TYPE_CHECKING:
 console = Console()
 
 
-
-
-
 class ImageFormat(str, Enum):
     """The image format to use for the output images."""
 
@@ -203,11 +200,16 @@ class Barbet(TorchApp):
         self,
         module,
         genome_path: Path,
-        markers: list[Path], 
+        markers: dict[str, str], 
         batch_size: int = Param(
             64, help="The batch size for the prediction dataloader."
         ),
-        num_workers: int = 4,
+        cpus: int = Param(
+            1, help="The number of CPUs to use for the prediction dataloader."
+        ),
+        dataloader_workers: int = Param(
+            4, help="The number of workers to use for the dataloader."
+        ),
         repeats: int = Param(
             2,
             help="The minimum number of times to use each protein embedding in the prediction.",
@@ -218,6 +220,9 @@ class Barbet(TorchApp):
         import numpy as np
         from torch.utils.data import DataLoader
         from barbet.data import BarbetPredictionDataset
+        
+        # Set PyTorch thread limits
+        torch.set_num_threads(cpus)
        
         # Get hyperparameters from checkpoint
         stack_size = module.hparams.get("stack_size", 32)
@@ -262,7 +267,7 @@ class Barbet(TorchApp):
         dataloader = DataLoader(
             self.prediction_dataset,
             batch_size=batch_size,
-            num_workers=num_workers,
+            num_workers=dataloader_workers,
             shuffle=False,
         )
 
@@ -290,7 +295,7 @@ class Barbet(TorchApp):
             default=None, help="A path to output the results as a CSV."
         ),
         cpus: int = Param(
-            1, help="The number of CPUs to use to extract the single copy markers."
+            1, help="The number of CPUs to use."
         ),
         pfam_db: str = Param(
             "https://data.ace.uq.edu.au/public/gtdbtk/release95/markers/pfam/Pfam-A.hmm",
@@ -303,7 +308,6 @@ class Barbet(TorchApp):
         **kwargs,
     ):
         """Barbet is a tool for assigning taxonomic labels to genomes using Machine Learning."""
-        import torch
         # import pandas as pd
         import polars as pl
         from itertools import chain
@@ -363,7 +367,7 @@ class Barbet(TorchApp):
         total_df = None
         for genome_path, maker_genes in markers_gene_map.items():
             genome_path = Path(genome_path)
-            prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, **kwargs)
+            prediction_dataloader = self.prediction_dataloader(module, genome_path, maker_genes, cpus=cpus, **kwargs)
             module.setup_prediction(self, genome_path.name)
             trainer.predict(module, dataloaders=prediction_dataloader)
             results_df = module.results_df
@@ -376,7 +380,8 @@ class Barbet(TorchApp):
                 total_df = pl.concat([total_df, results_df], how="vertical")
 
                 if output_csv:
-                    results_df.write_csv(output_csv, mode="a", include_header=False)
+                    with open(output_csv, mode="a") as f:
+                        results_df.write_csv(f, include_header=False)
 
         print_polars_df(
             total_df[["name", "species_prediction", "species_probability", ]],
