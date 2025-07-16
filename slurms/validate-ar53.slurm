@@ -1,7 +1,7 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=predict
+#SBATCH --job-name=barbet
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -32,12 +32,15 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
 MAX_REPEATS=1
-MAX_REPEATS=4
 
 
 DOMAIN=ar53
-ESM_LAYERS=6
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
+GENOMES=${PREPROCESSED_DIR}/${DOMAIN}/validation-genomes.txt
+MAX_REPEATS=4
+
+
+ESM_LAYERS=6
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -45,20 +48,23 @@ FEATURES=768
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm6.td-b4f768l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_2/checkpoints/weights-epoch\=65-genus\=0.78.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 
 
 DOMAIN=ar53
 ESM_LAYERS=6
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -66,19 +72,22 @@ FEATURES=1536
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm6.td-b4f1536l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_0/checkpoints/weights-epoch\=61-genus\=0.8.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 
 DOMAIN=ar53
 ESM_LAYERS=12
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -86,19 +95,22 @@ FEATURES=768
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm12.td-b4f768l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_0/checkpoints/weights-epoch\=63-genus\=0.91.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 
 DOMAIN=ar53
 ESM_LAYERS=12
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -106,21 +118,24 @@ FEATURES=1536
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm12.td-b4f1536l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_0/checkpoints/weights-epoch\=68-genus\=0.92.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 
 
 
 DOMAIN=ar53
 ESM_LAYERS=30
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -128,19 +143,22 @@ FEATURES=768
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm30.td-b4f768l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_0/checkpoints/weights-epoch\=65-genus\=0.91.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
 
 DOMAIN=ar53
 ESM_LAYERS=30
-PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -148,13 +166,16 @@ FEATURES=1536
 CHECKPOINT=/data/gpfs/projects/punim2199/rob/barbet/outputs/ar53-stack-esm30.td-b4f1536l2g2lr0.0002ep70a512s32val0-r226/lightning_logs/version_0/checkpoints/weights-epoch\=64-genus\=0.91.ckpt
 
 for REPEATS in $(seq 1 $MAX_REPEATS); do    
+    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+    if [ ! -s "$OUTPUT" ]; then
         barbet-tools predict-memmap \
                 --checkpoint $CHECKPOINT \
                 --memmap  $MEMMAP \
                 --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
                 --treedict $TREEDICT \
-                --treedict-partition 0 \
+                --genomes $GENOMES \
                 --repeats $REPEATS \
-                --output-csv validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
+                --num-workers 4 \
+                --output-csv $OUTPUT
+    fi
 done
-

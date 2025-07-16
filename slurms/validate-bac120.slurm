@@ -39,61 +39,10 @@ GENOMES=${PREPROCESSED_DIR}/${DOMAIN}/validation-genomes.txt
 
 
 
-ESM_LAYERS=6
-FEATURES=768
-MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
-TREEDICT_NAME=esm${ESM_LAYERS}.td
-TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
-
-RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s32val0-r226sp
-VERSION=$(ls -r1 --color=never outputs/$RUN_NAME/lightning_logs)
-CHECKPOINT=$(ls -1 --color=never outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
-for REPEATS in $(seq 1 $MAX_REPEATS); do    
-    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
-    if [ ! -s "$OUTPUT" ]; then
-        barbet-tools predict-memmap \
-                --checkpoint $CHECKPOINT \
-                --memmap  $MEMMAP \
-                --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
-                --treedict $TREEDICT \
-                --genomes $GENOMES \
-                --repeats $REPEATS \
-                --num-workers 4 \
-                --output-csv $OUTPUT
-    fi
-done
-
-
-
-ESM_LAYERS=12
-FEATURES=768
-MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
-TREEDICT_NAME=esm${ESM_LAYERS}.td
-TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
-
-RUN_NAME=${DOMAIN}-stack-esm${ESM_LAYERS}.td-b4f${FEATURES}l2g2lr0.0002ep70a512s32val0-r226sp
-VERSION=$(ls -r1 --color=never outputs/$RUN_NAME/lightning_logs)
-CHECKPOINT=$(ls -1 --color=never outputs/$RUN_NAME/lightning_logs/$VERSION/checkpoints/weights* )
-
-for REPEATS in $(seq 1 $MAX_REPEATS); do    
-    OUTPUT=validation/$DOMAIN/validation-${DOMAIN}-esm${ESM_LAYERS}-f${FEATURES}-rep${REPEATS}.csv
-    if [ ! -s "$OUTPUT" ]; then
-        barbet-tools predict-memmap \
-                --checkpoint $CHECKPOINT \
-                --memmap  $MEMMAP \
-                --memmap-index  ${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.txt \
-                --treedict $TREEDICT \
-                --genomes $GENOMES \
-                --repeats $REPEATS \
-                --num-workers 4 \
-                --output-csv $OUTPUT
-    fi
-done
-
-
-
-ESM_LAYERS=6
+ESM_LAYERS=30
+#FEATURES=768
 FEATURES=1536
+
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 TREEDICT_NAME=esm${ESM_LAYERS}.td
 TREEDICT=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/${TREEDICT_NAME}
@@ -115,3 +64,5 @@ for REPEATS in $(seq 1 $MAX_REPEATS); do
                 --output-csv $OUTPUT
     fi
 done
+
+

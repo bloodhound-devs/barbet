@@ -32,7 +32,7 @@ export TORCH_HOME=/data/gpfs/projects/punim2199/torch-hub
 
 DOMAIN=bac120
 #DOMAIN=ar53
-LAYERS=6
+LAYERS=30
 
 
 barbet-esm preprocess \

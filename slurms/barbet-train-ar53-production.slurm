@@ -1,19 +1,19 @@
 #!/bin/bash
  
 # To give your job a name, replace "MyJob" with an appropriate name
-#SBATCH --job-name=bh-bac120
+#SBATCH --job-name=ar53-prod
  
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 7-0:00:00
+#SBATCH -t 4:00:00
 # SBATCH -t 4-0:00:00
  
 #SBATCH --mem-per-cpu=64G
  
 # SBATCH -p cascade
-#SBATCH -p gpu-h100,gpu-a100,gpu-a100-short
+#SBATCH -p gpu-h100,gpu-a100
 # SBATCH -p gpu-a100-short,gpu-a100,gpu-a100-preempt
 # SBATCH -p gpu-a100-short,gpu-a100
 # SBATCH -p gpu-a100-short
@@ -34,13 +34,14 @@ source /data/gpfs/projects/punim2199/rob/barbet/.venv/bin/activate
 export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-DOMAIN=bac120
-#DOMAIN=ar53
+#DOMAIN=bac120
+DOMAIN=ar53
 ESM_LAYERS=12
 #ESM_LAYERS=6
 #FEATURES=2048
 #FEATURES=768
-FEATURES=1536
+FEATURES=768
+#FEATURES=1536
 #FEATURES=256
 ATTENTION=512
 STACK_SIZE=32
@@ -53,7 +54,6 @@ EPOCHS=70
 BATCH=4
 
 
-#PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed
 PREPROCESSED_DIR=/data/gpfs/projects/punim2199/preprocessed-r226
 MEMMAP=${PREPROCESSED_DIR}/${DOMAIN}/esm${ESM_LAYERS}/esm${ESM_LAYERS}.npy
 
@@ -81,7 +81,8 @@ barbet-tools train  \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \
-        --run-name  ${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${STACK_SIZE}val0-r226 \
+        --output-dir  outputs/${DOMAIN}-stack-${TREEDICT_NAME}-b${BATCH}f${FEATURES}l${LAYERS}g${GROWTH}lr${LR}ep${EPOCHS}a${ATTENTION}s${STACK_SIZE}prod4-r226 \
         --num-workers 4 \
+        --train-all \
         --wandb-entity   "mariadelmarq-The University of Melbourne" \
         --wandb 

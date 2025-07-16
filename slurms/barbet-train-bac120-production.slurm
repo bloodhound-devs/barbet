@@ -77,7 +77,7 @@ barbet-tools train  \
         --growth-factor $GROWTH \
         --max-epochs $EPOCHS \
         --attention-size $ATTENTION \
-        --seq-count $STACK_SIZE \
+        --stack-size $STACK_SIZE \
         --batch-size $BATCH \
         --max-learning-rate $LR \
         --embedding-model ESM${ESM_LAYERS} \

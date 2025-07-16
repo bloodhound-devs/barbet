@@ -6,10 +6,11 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --array=0-119%10
-# SBATCH --array=0-52%16
+# SBATCH --array=0-119%10
+#SBATCH --array=102,108
  
 # set your minimum acceptable walltime=days-hours:minutes:seconds
-#SBATCH -t 20:00:00
+#SBATCH -t 48:00:00
  
 #SBATCH --mem-per-cpu=12G
  
