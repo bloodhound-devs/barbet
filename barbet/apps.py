@@ -119,16 +119,8 @@ class Barbet(TorchApp):
             attention_size=attention_size,
         )
 
-    # @method
-    # def input_count(self) -> int:
-    #     return 1
-
     @method
     def loss_function(self):
-        # def dummy_loss(prediction, target):
-        #     return prediction[0,0] * 0.0
-        #     # return prediction.mean() * 0.0
-        # return dummy_loss # hack
         from hierarchicalsoftmax import HierarchicalSoftmaxLoss
 
         return HierarchicalSoftmaxLoss(root=self.classification_tree)
@@ -522,4 +514,30 @@ class Barbet(TorchApp):
             return "valid_loss"
         return "genus"
 
+    def checkpoint(
+        self, 
+        checkpoint:Path=Param(None, help="The path to a checkpoint file for the Barbet parameters. If not provided, then it will use a standard checkpoint."), 
+        large:bool=Param(False, help="Whether or not to use the large standard checkpoint of the Barbet parameters."), 
+        archaea:bool=Param(False, help="Whether or not to use the standard model for archaea. If not, then it uses the default model for bacteria."),
+    ) -> str:
+        if checkpoint:
+            return checkpoint
+        
+        # Weights are here: https://figshare.unimelb.edu.au/articles/dataset/Trained_weights_for_Barbet/
+        # DOI: https://doi.org/10.26188/29578964
+
+        if archaea:
+            if large: 
+                # barbet-ar53-ESM12-large.ckpt
+                return "https://figshare.unimelb.edu.au/ndownloader/files/56332160"
+            
+            # barbet-ar53-ESM12-base.ckpt
+            return "https://figshare.unimelb.edu.au/ndownloader/files/56332157"
+        
+        if large:
+            # barbet-bac120-ESM6-large.ckpt
+            return "https://figshare.unimelb.edu.au/ndownloader/files/56307647"
+        
+        # barbet-bac120-ESM6-base.ckpt
+        return "https://figshare.unimelb.edu.au/ndownloader/files/56307671"
 
