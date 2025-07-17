@@ -4817,14 +4817,14 @@ optree = ["optree (>=0.9.1)"]
 
 [[package]]
 name = "torchapp"
-version = "0.5.6"
+version = "0.5.7"
 description = "A wrapper for PyTorch projects to create easy command-line interfaces and manage hyper-parameter tuning."
 optional = false
 python-versions = "<3.13,>=3.10"
 groups = ["main"]
 files = [
-    {file = "torchapp-0.5.6-py3-none-any.whl", hash = "sha256:f2df3893d3e6242d9fffe3bb8c78b07e099088bc3c586c08b361322990cc832e"},
-    {file = "torchapp-0.5.6.tar.gz", hash = "sha256:8d6de628f97af7c9435a491e48d9a4e62460c8a76069af32609be595bcd12797"},
+    {file = "torchapp-0.5.7-py3-none-any.whl", hash = "sha256:94db981582143dc8a76a7d3a20d7d0a6bd8e4a2899de1a71bbcd6e255b2c9cc0"},
+    {file = "torchapp-0.5.7.tar.gz", hash = "sha256:adcb7a82403fefe3c8612d793b2190cf7b9ee79250af1444b2ab76a56cce031f"},
 ]
 
 [package.dependencies]
@@ -5529,4 +5529,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "c42cb283d83003af1c32108725799e956ba8a1c6c71c61c105f1024b47a1e916"
+content-hash = "36520efe59469fe6481dc84b7412bc7ec08a6cb58788070fdd9a070da32fa000"
