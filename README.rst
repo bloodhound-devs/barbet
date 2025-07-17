@@ -2,7 +2,11 @@
 
 .. start-badges
 
-|testing badge| |coverage badge| |docs badge| |black badge| |torchapp badge|
+|pypi badge| |testing badge| |coverage badge| |docs badge| |black badge| |torchapp badge|
+
+.. |pypi badge| image:: https://img.shields.io/pypi/v/barbet?color=blue
+   :alt: PyPI - Version
+   :target: https://pypi.org/project/barbet/
 
 .. |testing badge| image:: https://github.com/bloodhound-devs/barbet/actions/workflows/testing.yml/badge.svg
     :target: https://github.com/bloodhound-devs/barbet/actions
