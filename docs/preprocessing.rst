@@ -33,7 +33,7 @@ The next step in preprocessing is to build embedding files for each gene family.
 .. code-block:: bash
 
     for INDEX in $(seq 0 119); do
-        bloodhound-esm build-gene-array \
+        barbet-esm build-gene-array \
             --marker-genes bac120_marker_genes_all.tar.gz \
             --output-dir preprocessed/ \
             --family-index $INDEX
@@ -51,11 +51,11 @@ You can choose the number of layers with the ``--layers`` option with one of the
 Final preprocessing step
 =================================
 
-The final preprocessing step is to collect the embeddings into a single file and to build the SeqTree.
+The final preprocessing step is to collect the embeddings into a single file and to build the TreeDict.
 
 .. code-block:: bash
 
-    bloodhound-esm preprocess \
+    barbet-esm preprocess \
         --taxonomy bac120_taxonomy.tsv.gz \
         --marker-genes bac120_marker_genes_all.tar.gz \
         --output-dir preprocessed
@@ -63,6 +63,6 @@ The final preprocessing step is to collect the embeddings into a single file and
 This will create three files called:
     - ``preprocessed.npy`` - the memmap array with embeddings for each gene family
     - ``preprocessed.txt`` - the index to the memmap array
-    - ``preprocessed.st`` - the SeqTree which stores the location on the taxonomy tree for each genome.
+    - ``preprocessed.st`` - the TreeDict which stores the location on the taxonomy tree for each genome.
 
 Now you are ready to begin :doc:`training` your model.

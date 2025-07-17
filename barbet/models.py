@@ -3,7 +3,7 @@ from torch import nn
 from hierarchicalsoftmax import HierarchicalSoftmaxLazyLinear, SoftmaxNode
 
 
-class BloodhoundModel(nn.Module):
+class BarbetModel(nn.Module):
     def __init__(
         self, 
         classification_tree:SoftmaxNode, 
@@ -54,3 +54,7 @@ class BloodhoundModel(nn.Module):
             return result, attention_scores
             
         return result
+
+
+# Alias for loading legacy checkpoints
+BloodhoundModel = BarbetModel

@@ -2,6 +2,6 @@
 Command Line Interface Reference
 ================================
 
-.. .. click:: bloodhound.apps:Bloodhound.click
-..    :prog: bloodhound
+.. .. click:: barbet.apps:Barbet.click
+..    :prog: barbet
 ..    :nested: full

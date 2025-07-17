@@ -1,14 +1,14 @@
 [tool.poetry]
-name = "Bloodhound"
+name = "Barbet"
 version = "0.1.1"
-description = "Geometric Analysis of MicroBIal Taxonomies"
-authors = ["Wytamma Wirth, Robert Turnbull, Mar Quiroga <robert.turnbull@unimelb.edu.au>"]
+description = "Bacteria and Archaea Representation using Bidirectional Embeddings for Taxonomic classification"
+authors = ["Robert Turnbull,  Mar Quiroga, Gabriele Marini, Torsten Seemann, Wytamma Wirth"]
 license = "Apache-2.0"
 readme = "README.rst"
-repository = "https://github.com/bloodhound-devs/bloodhound/"
-documentation = "https://bloodhound-devs.github.io/bloodhound"
-homepage = "https://github.com/bloodhound-devs/bloodhound/"
-keywords = ["fastai", "torchapp", "pytorch", "deep learning", "command-line interface"]
+repository = "https://github.com/bloodhound-devs/barbet/"
+documentation = "https://bloodhound-devs.github.io/barbet"
+homepage = "https://github.com/bloodhound-devs/barbet/"
+keywords = ["torchapp", "pytorch", "deep learning", "command-line interface"]
 # For classifiers see https://pypi.org/classifiers/
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
@@ -19,13 +19,12 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
-torchapp = {git = "https://github.com/rbturnbull/torchapp.git", branch = "lightning"}
-hierarchicalsoftmax = {git = "https://github.com/rbturnbull/hierarchicalsoftmax.git", rev = "torchmetrics"}
-bio-corgi = {git = "https://github.com/rbturnbull/corgi.git", rev = "lightning"}
-
+torchapp = ">=0.5.7"
+hierarchicalsoftmax = ">=1.4.3"
+biopython = ">=1.79"
 torch = "=2.2.0"
-tqdm = "^4.66.4"
-lightning = "^2.3.3"
+lightning = ">=2.3.3"
+polars = ">=1.31.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6.2.5"
@@ -53,11 +52,6 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-bloodhound = "bloodhound.apps:Bloodhound.main"
-bloodhound-tools = "bloodhound.apps:Bloodhound.tools"
-
-bloodhound-esm = "bloodhound.embeddings.esm:ESMEmbedding.tools"
-bloodhound-prostt5 = "bloodhound.embeddings.prost_t5:ProstT5Embedding.main"
-bloodhound-preprocess-alphafold2 = "bloodhound.embeddings.alphafold2:app"
-
-bloodhound-preprocess-alphafold2-test = "bloodhound.embeddings.alphafold2:test"
+barbet = "barbet.apps:Barbet.main"
+barbet-tools = "barbet.apps:Barbet.tools"
+barbet-esm = "barbet.embeddings.esm:ESMEmbedding.tools"

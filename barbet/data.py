@@ -2,12 +2,13 @@ import random
 import os
 import numpy as np
 from collections import defaultdict
+from typing import Iterable
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import lightning as L
 from dataclasses import dataclass, field
-from corgi.seqtree import SeqTree
+from hierarchicalsoftmax import TreeDict
 
 
 RANKS = ["phylum", "class", "order", "family", "genus", "species"]
@@ -36,32 +37,38 @@ def choose_k_from_n(lst, k) -> list[int]:
 
 
 @dataclass(kw_only=True)
-class BloodhoundStack():
-    species:str
+class BarbetStack():
+    genome:str
     array_indices:np.array
+
+    def __post_init__(self):
+        assert self.array_indices.ndim == 1, "Stack indices must be a 1D array"
 
 
 @dataclass(kw_only=True)
-class BloodhoundPredictionDataset(Dataset):
+class BarbetPredictionDataset(Dataset):
     array:np.memmap|np.ndarray
     accessions: list[str]
-    seq_count:int
+    stack_size:int
     repeats:int = 2
     seed:int = 42
-    stacks: list[BloodhoundStack] = field(init=False)
+    stacks: list[BarbetStack] = field(init=False)
+    genome_filter:set[str]|None = None
 
     def __post_init__(self):
-        species_to_array_indices = defaultdict(set)
+        genome_to_array_indices = defaultdict(set)
         for index, accession in enumerate(self.accessions):
             slash_position = accession.rfind("/")
             assert slash_position != -1
-            species = accession[:slash_position]
-            species_to_array_indices[species].add(index)
+            genome = accession[:slash_position]
+            if self.genome_filter and genome not in self.genome_filter:
+                continue
+            genome_to_array_indices[genome].add(index)
 
         # Build stacks
         random.seed(self.seed)
         self.stacks = []
-        for species, species_array_indices in species_to_array_indices.items():
+        for genome, genome_array_indices in genome_to_array_indices.items():
             stack_indices = []
             remainder = []
             for repeat_index in range(self.repeats + 1):
@@ -69,28 +76,38 @@ class BloodhoundPredictionDataset(Dataset):
                     break
 
                 # Finish Remainder
-                species_array_indices_set = set(species_array_indices)
-                available = species_array_indices_set - set(remainder)
-                to_add = random.sample(list(available), self.seq_count - len(remainder))
+                genome_array_indices_set = set(genome_array_indices)
+                available = genome_array_indices_set - set(remainder)
+                needed = self.stack_size - len(remainder)
+                available_list = list(available)
+
+                if len(available_list) >= needed:
+                    to_add = random.sample(available_list, needed)  # without replacement
+                else:
+                    to_add = random.choices(available_list, k=needed)  # with replacement
                 to_add_set = set(to_add)
                 assert not set(remainder) & to_add_set, "remainder and to_add should be disjoint"
 
-                new_stack = sorted(remainder + to_add)
-                stack_indices.append(new_stack)
-
-                remainder = list(species_array_indices_set - to_add_set)
+                self.add_stack(genome, remainder + to_add)
+                remainder = list(genome_array_indices_set - to_add_set)
                 random.shuffle(remainder)
 
                 # If we have already added each item the required number of times, then stop
                 if repeat_index >= self.repeats:
                     break
 
-                while len(remainder) >= self.seq_count:
-                    stack_indices.append( remainder[:self.seq_count] )
-                    remainder = remainder[self.seq_count:]
+                while len(remainder) >= self.stack_size:
+                    self.add_stack(genome, remainder[:self.stack_size])
+                    remainder = remainder[self.stack_size:]
                             
-            stack = BloodhoundStack(species=species, array_indices=stack_indices)
-            self.stacks.append(stack)
+    def add_stack(self, genome:str, indices:Iterable[int]) -> BarbetStack:
+        """
+        Add a new stack to the dataset.
+        """
+        indices = np.array(sorted(indices))
+        stack = BarbetStack(genome=genome, array_indices=indices)
+        self.stacks.append(stack)
+        return stack
 
     def __len__(self):
         return len(self.stacks)
@@ -101,21 +118,21 @@ class BloodhoundPredictionDataset(Dataset):
 
         assert len(array_indices) > 0, f"Stack has no array indices"
         with torch.no_grad():
-            data = np.array(self.array[array_indices, :], copy=False)
-            embeddings = torch.tensor(data, dtype=torch.float16)
+            data = np.asarray(self.array[array_indices, :]).copy()
+            embeddings = torch.from_numpy(data).to(torch.float16)
+
             del data
         
         return embeddings
 
 
 @dataclass(kw_only=True)
-class BloodhoundTrainingDataset(Dataset):
+class BarbetTrainingDataset(Dataset):
     accessions: list[str]
-    seqtree: SeqTree
+    treedict: TreeDict
     array:np.memmap|np.ndarray
-    gene_id_dict: dict[str, int]
     accession_to_array_index:dict[str,int]|None=None
-    seq_count:int = 0
+    stack_size:int = 0
 
     def __len__(self):
         return len(self.accessions)
@@ -123,8 +140,8 @@ class BloodhoundTrainingDataset(Dataset):
     def __getitem__(self, idx):
         accession = self.accessions[idx]
         array_indices = self.accession_to_array_index[accession] if self.accession_to_array_index else idx
-        if self.seq_count:
-            array_indices = choose_k_from_n(array_indices, self.seq_count)
+        if self.stack_size:
+            array_indices = choose_k_from_n(array_indices, self.stack_size)
 
         assert len(array_indices) > 0, f"Accession {accession} has no array indices"
         with torch.no_grad():
@@ -133,36 +150,19 @@ class BloodhoundTrainingDataset(Dataset):
             del data
     
         # gene_id = gene_id_from_accession(accession)
-        seq_detail = self.seqtree[accession]
+        seq_detail = self.treedict[accession]
         node_id = int(seq_detail.node_id)
         del seq_detail
         
-        # return embedding, self.gene_id_dict[gene_id], self.seqtree[self.accessions[0]].node_id # hack
         return embedding, node_id
-
-
-# @dataclass(kw_only=True)
-# class BloodhoundPredictionDataset(Dataset):
-#     embeddings: list[torch.Tensor]
-#     gene_family_ids: list[int]
-
-#     def __post_init__(self):
-#         assert len(self.embeddings) == len(self.gene_family_ids)
-
-#     def __len__(self):
-#         return len(self.gene_family_ids)
-
-#     def __getitem__(self, idx):
-#         return self.embeddings[idx] #, self.gene_family_ids[idx]
     
 
 @dataclass
-class BloodhoundDataModule(L.LightningDataModule):
-    seqtree: SeqTree
+class BarbetDataModule(L.LightningDataModule):
+    treedict: TreeDict
     # seqbank: SeqBank
     array:np.memmap|np.ndarray
     accession_to_array_index:dict[str,int]
-    gene_id_dict: dict[str,int]
     max_items: int = 0
     batch_size: int = 16
     num_workers: int = 0
@@ -172,29 +172,27 @@ class BloodhoundDataModule(L.LightningDataModule):
 
     def __init__(
         self,
-        seqtree: SeqTree,
+        treedict: TreeDict,
         array:np.memmap|np.ndarray,
         accession_to_array_index:dict[str,list[int]],
-        gene_id_dict: dict[str,int],
         max_items: int = 0,
         batch_size: int = 16,
         num_workers: int = None,
         validation_partition:int = 0,
         test_partition:int=-1,
-        seq_count:int=0,
+        stack_size:int=0,
         train_all:bool=False,
     ):
         super().__init__()
         self.array = array
         self.accession_to_array_index = accession_to_array_index
-        self.seqtree = seqtree
-        self.gene_id_dict = gene_id_dict
+        self.treedict = treedict
         self.max_items = max_items
         self.batch_size = batch_size
         self.validation_partition = validation_partition
         self.test_partition = test_partition
         self.num_workers = min(os.cpu_count(), 8) if num_workers is None else num_workers
-        self.seq_count = seq_count
+        self.stack_size = stack_size
         self.train_all = train_all
 
     def setup(self, stage=None):
@@ -203,7 +201,7 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.training = []
         self.validation = []
 
-        for accession, details in self.seqtree.items():
+        for accession, details in self.treedict.items():
             partition = details.partition
             if partition == self.test_partition:
                 continue
@@ -220,14 +218,13 @@ class BloodhoundDataModule(L.LightningDataModule):
         self.train_dataset = self.create_dataset(self.training)
         self.val_dataset = self.create_dataset(self.validation)
 
-    def create_dataset(self, accessions:list[str]) -> BloodhoundTrainingDataset:
-        return BloodhoundTrainingDataset(
+    def create_dataset(self, accessions:list[str]) -> BarbetTrainingDataset:
+        return BarbetTrainingDataset(
             accessions=accessions, 
-            seqtree=self.seqtree, 
+            treedict=self.treedict, 
             array=self.array,
             accession_to_array_index=self.accession_to_array_index,
-            gene_id_dict=self.gene_id_dict,
-            seq_count=self.seq_count,
+            stack_size=self.stack_size,
         )
     
     def train_dataloader(self):

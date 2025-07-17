@@ -29,6 +29,6 @@ export PATH=/data/gpfs/projects/punim2199/poetry-env/bin:$PATH
  
 export HF_HOME=/home/rturnbull/wytamma/huggingface
 
-source /home/rturnbull/wytamma/rob/bloodhound-lightning/.venv/bin/activate
+source /home/rturnbull/wytamma/rob/barbet-lightning/.venv/bin/activate
 
 python seqbank-to-memmap.py /data/projects/punim2199/rob/release220/bac120/esm6/esm6.sb /data/projects/punim2199/rob/release220/bac120/esm6/esm6.np /data/projects/punim2199/rob/release220/bac120/esm6/esm6.txt
